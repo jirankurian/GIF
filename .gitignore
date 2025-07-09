@@ -7,6 +7,10 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+# Reference/
+# Rules/
+# Prompts/
+# .context/
 .Python
 build/
 develop-eggs/

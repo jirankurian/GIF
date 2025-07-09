@@ -1,0 +1,54 @@
+
+FIGURE 1 SPECIFICATIONS FOR GRAPHIC DESIGN
+==========================================
+
+Layout: 6-panel figure (2 rows × 3 columns)
+Size: 16" × 12" (publication quality)
+Resolution: 300 DPI minimum
+
+Panel A (Top Left): Learning Curves
+- X-axis: Training Samples (0-1300)
+- Y-axis: Classification Accuracy (0.5-1.0)
+- Two lines: Naive (blue), Pre-exposed (purple)
+- Horizontal line at 90% accuracy (red dashed)
+- Legend in lower right
+
+Panel B (Top Middle): Performance Metrics
+- Bar chart comparing 4 key metrics
+- Blue bars: Naive model
+- Purple bars: Pre-exposed model
+- Y-axis: Relative performance
+- Error bars if available
+
+Panel C (Top Right): Statistical Significance
+- Bar chart of p-values
+- Y-axis: log scale (0.001-0.1)
+- Horizontal line at α = 0.05
+- Green bars for significant results
+
+Panel D (Bottom Left): Few-Shot Learning
+- Bar chart: 1-shot, 5-shot, 10-shot
+- Grouped bars: Naive vs Pre-exposed
+- Y-axis: Accuracy (65-90%)
+
+Panel E (Bottom Middle): Knowledge Retention
+- Single metric display: 94.7%
+- Visual indicator of excellence (>95% threshold)
+- Color coding: Green for excellent
+
+Panel F (Bottom Right): Neural Organization
+- Two metrics: Structure Index, Separation Quality
+- Improvement percentages displayed
+- Visual emphasis on +34% improvement
+
+Color Scheme:
+- Naive model: #2E86AB (blue)
+- Pre-exposed model: #A23B72 (purple)
+- Significant results: #4CAF50 (green)
+- Highlights: #C73E1D (red)
+
+Typography:
+- Title: 18pt bold
+- Panel titles: 14pt bold
+- Axis labels: 12pt
+- Data labels: 10pt

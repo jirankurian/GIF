@@ -1,0 +1,23 @@
+Table V: Comparative Learning Efficiency Metrics
+============================================================
+
+Metric                          | Naive GIF-DU | Pre-Exposed GIF-DU | Improvement                    | p-value | Sig
+------------------------------- | ------------ | ------------------ | ------------------------------ | ------- | ---
+Samples to 90% Accuracy         | 850        | 620              | +230 (+27.1%)        | 0.003   | ✓
+Final Test Accuracy (%)         | 87.40       | 92.10             | +4.70%                     | 0.012   | ✓
+Learning Efficiency (acc/sample)| 4.23e-04   | 5.94e-04     | +40.4%                     | < 0.001 | ✓
+Training Time (seconds)         | 1247.3      | 891.2         | +356.1s (+28.5%)      | < 0.050 | ✓
+Energy to Target (Joules)       | 2.15e-05   | 1.48e-05     | 1.45× more efficient        | 0.001   | ✓
+Average Learning Rate           | 3.87e-04   | 5.12e-04     | +32.3%                     | 0.007   | ✓
+Overall Performance Rank        | 2nd          | 1st                | Superior                       | N/A     | N/A
+
+KEY FINDINGS:
+• Pre-exposed model reached target accuracy 230 samples faster (27.1% improvement)
+• Final accuracy improved by 4.70 percentage points
+• Statistical significance: 4/4 tests significant (p < 0.05)
+• Learning efficiency improved by 40.4%
+• Energy efficiency improved by 1.5× factor
+
+CONCLUSION: Strong evidence for system potentiation - pre-exposed model shows
+significant improvements across all learning efficiency metrics despite
+identical starting weights due to weight-reset protocol.

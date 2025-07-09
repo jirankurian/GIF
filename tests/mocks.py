@@ -1,0 +1,218 @@
+"""
+Mock Components for GIF Framework Testing
+==========================================
+
+This module provides mock implementations of the GIF framework interfaces
+for use in unit testing. These mocks allow for isolated testing of components
+without requiring complex real implementations.
+
+The mock objects implement the required interface contracts but with simple,
+predictable behavior that makes testing deterministic and fast.
+
+Key Components:
+- MockEncoder: Simple encoder that returns predictable spike trains
+- MockDecoder: Simple decoder that returns predictable actions
+- InvalidMock: Object that doesn't implement interfaces (for negative testing)
+"""
+
+from typing import Any, Dict
+import torch
+from gif_framework.interfaces.base_interfaces import (
+    EncoderInterface, 
+    DecoderInterface, 
+    SpikeTrain, 
+    Action
+)
+
+
+class MockEncoder(EncoderInterface):
+    """
+    Mock encoder implementation for testing purposes.
+    
+    This encoder provides predictable, deterministic behavior for testing
+    the GIF orchestrator and other components without requiring complex
+    real encoding logic.
+    
+    The encoder always returns the same spike train pattern regardless
+    of input, making test assertions reliable and repeatable.
+    """
+    
+    def __init__(self, output_shape: tuple = (10, 1, 20)) -> None:
+        """
+        Initialize the mock encoder.
+        
+        Args:
+            output_shape (tuple): Shape of spike train to return (num_steps, batch_size, features).
+                                 Defaults to (10, 1, 20) for testing.
+        """
+        self.output_shape = output_shape
+        self.encoding_method = "mock_rate_coding"
+        self.calibration_calls = 0  # Track calibration calls for testing
+    
+    def encode(self, raw_data: Any) -> SpikeTrain:
+        """
+        Convert raw data to a predictable spike train.
+        
+        This mock implementation ignores the actual raw_data and always
+        returns the same spike train pattern for deterministic testing.
+        
+        Args:
+            raw_data (Any): Input data (ignored in mock).
+        
+        Returns:
+            SpikeTrain: Predictable spike train tensor with shape self.output_shape.
+        """
+        # Create a predictable spike pattern for testing
+        # Use a simple pattern: alternating 0.0 and 0.8 values
+        spike_train = torch.zeros(self.output_shape)
+        spike_train[::2] = 0.8  # Every other time step has spikes
+        
+        return spike_train
+    
+    def get_config(self) -> Dict[str, Any]:
+        """
+        Return mock encoder configuration.
+        
+        Returns:
+            Dict[str, Any]: Configuration dictionary for testing.
+        """
+        return {
+            "encoder_type": "MockEncoder",
+            "encoding_method": self.encoding_method,
+            "output_shape": self.output_shape,
+            "calibration_calls": self.calibration_calls,
+            "version": "test_v1.0"
+        }
+    
+    def calibrate(self, sample_data: Any) -> None:
+        """
+        Mock calibration method.
+        
+        This implementation just tracks how many times calibration
+        was called, which is useful for testing the orchestrator's
+        calibration workflow.
+        
+        Args:
+            sample_data (Any): Sample data for calibration (ignored in mock).
+        """
+        self.calibration_calls += 1
+
+
+class MockDecoder(DecoderInterface):
+    """
+    Mock decoder implementation for testing purposes.
+    
+    This decoder provides predictable, deterministic behavior for testing
+    the GIF orchestrator and integration workflows without requiring complex
+    real decoding logic.
+    
+    The decoder always returns the same action regardless of input spike train,
+    making test assertions reliable and repeatable.
+    """
+    
+    def __init__(self, mock_action: Action = "mock_action_success") -> None:
+        """
+        Initialize the mock decoder.
+        
+        Args:
+            mock_action (Action): The action to return from decode().
+                                 Defaults to "mock_action_success".
+        """
+        self.mock_action = mock_action
+        self.decoding_method = "mock_spike_count"
+        self.decode_calls = 0  # Track decode calls for testing
+    
+    def decode(self, spike_train: SpikeTrain) -> Action:
+        """
+        Convert spike train to a predictable action.
+        
+        This mock implementation ignores the actual spike_train and always
+        returns the same action for deterministic testing.
+        
+        Args:
+            spike_train (SpikeTrain): Input spike train (ignored in mock).
+        
+        Returns:
+            Action: Predictable action for testing.
+        """
+        self.decode_calls += 1
+        return self.mock_action
+    
+    def get_config(self) -> Dict[str, Any]:
+        """
+        Return mock decoder configuration.
+        
+        Returns:
+            Dict[str, Any]: Configuration dictionary for testing.
+        """
+        return {
+            "decoder_type": "MockDecoder",
+            "decoding_method": self.decoding_method,
+            "mock_action": self.mock_action,
+            "decode_calls": self.decode_calls,
+            "version": "test_v1.0"
+        }
+
+
+class InvalidMock:
+    """
+    Invalid mock object that does NOT implement any GIF interfaces.
+    
+    This class is used for negative testing to ensure that the GIF
+    orchestrator properly rejects objects that don't implement the
+    required interface contracts.
+    
+    This class intentionally does not inherit from EncoderInterface
+    or DecoderInterface, making it invalid for attachment to the
+    GIF orchestrator.
+    """
+    
+    def __init__(self) -> None:
+        """Initialize the invalid mock object."""
+        self.invalid_type = "InvalidMock"
+    
+    def some_method(self) -> str:
+        """A method that doesn't match any interface contract."""
+        return "This object doesn't implement GIF interfaces"
+    
+    def get_config(self) -> Dict[str, Any]:
+        """Return configuration (but this doesn't make it a valid interface)."""
+        return {
+            "type": "InvalidMock",
+            "implements_encoder_interface": False,
+            "implements_decoder_interface": False
+        }
+
+
+# Utility functions for creating test data
+
+def create_test_spike_train(num_steps: int = 10, batch_size: int = 1, features: int = 20) -> SpikeTrain:
+    """
+    Create a test spike train with predictable pattern.
+    
+    Args:
+        num_steps (int): Number of time steps.
+        batch_size (int): Batch size.
+        features (int): Number of features.
+    
+    Returns:
+        SpikeTrain: Test spike train tensor.
+    """
+    spike_train = torch.zeros(num_steps, batch_size, features)
+    # Create a simple pattern: spikes at even time steps
+    spike_train[::2] = 0.5
+    return spike_train
+
+
+def create_test_raw_data() -> Dict[str, Any]:
+    """
+    Create test raw data for encoder input.
+    
+    Returns:
+        Dict[str, Any]: Test raw data dictionary.
+    """
+    return {
+        "data_type": "test_data",
+        "values": [1, 2, 3, 4, 5],
+        "metadata": {"source": "test_suite", "version": "1.0"}
+    }

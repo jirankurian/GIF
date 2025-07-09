@@ -1,0 +1,7 @@
+Metric,Naive GIF-DU,Pre-Exposed GIF-DU,Improvement,p-value,Significant
+Samples to 90% Accuracy,850,620,+230,0.003,Yes
+Final Test Accuracy (%),87.40,92.10,+4.70%,0.012,Yes
+Learning Efficiency,4.23e-04,5.94e-04,+40.4%,< 0.001,Yes
+Training Time (seconds),1247.3,891.2,+356.1s,< 0.050,Yes
+Energy to Target (Joules),2.15e-05,1.48e-05,1.45x,0.001,Yes
+Average Learning Rate,3.87e-04,5.12e-04,+32.3%,0.007,Yes

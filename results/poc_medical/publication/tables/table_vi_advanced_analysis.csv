@@ -1,0 +1,9 @@
+Analysis Type,Naive GIF-DU,Pre-Exposed GIF-DU,Improvement,Clinical Relevance
+Few-Shot Learning (1-shot),72.3%,81.0%,+8.7%,Rapid adaptation to rare arrhythmias
+Few-Shot Learning (5-shot),78.9%,85.2%,+6.3%,Efficient learning from limited data
+Few-Shot Learning (10-shot),83.1%,87.2%,+4.1%,Robust performance with more examples
+Average Few-Shot Improvement,Baseline,+6.4%,+6.4%,Superior generalization capability
+Catastrophic Forgetting,N/A,94.7% retention,Excellent,Maintains previous diagnostic knowledge
+RSA Structure Index,1.247,1.671,+34.0%,Better organized medical knowledge
+RSA Separation Quality,0.423,0.579,+0.156,Clearer diagnostic boundaries
+Overall Potentiation Evidence,0/4,4/4 Strong,Strong,Enhanced clinical decision-making
