@@ -1,0 +1,21 @@
+# POC/requirements.txt
+
+# Core ML/SNN libraries
+torch>=1.12        # PyTorch core library
+snntorch>=0.6      # snnTorch library for Spiking Neural Networks
+
+# Data handling and numerical operations
+numpy>=1.21        # Fundamental package for scientific computing
+pandas>=1.3        # Optional: Useful for data manipulation/analysis if needed later
+scikit-learn>=1.0  # For data splitting (train_test_split), evaluation metrics, and scaling (MinMaxScaler)
+joblib>=1.1        # Efficient saving/loading of Python objects (used for the scaler)
+
+# Utilities
+matplotlib>=3.5    # Library for creating static, animated, and interactive visualizations
+tqdm>=4.60         # A fast, extensible progress bar for loops
+
+# Optional for future enhancements (uncomment if needed):
+# requests        # For downloading data via HTTP
+# pyyaml          # For using YAML configuration files instead of .py
+# captum          # For more advanced model interpretability/XAI methods
+# jupyter         # For notebook-based development or analysis
