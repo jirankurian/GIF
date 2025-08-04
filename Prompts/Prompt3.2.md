@@ -1,6 +1,6 @@
 **Your Current Task: Task 3.2 - Engineering the Episodic Memory System**
 
-**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 3, read all logs in `.context/` (including the outcome previous tasks), and analyze the existing codebase. You will note that we have learning mechanisms but no system for storing the experiences they need to learn from. This task fills that critical gap. After your analysis, formulate your micro-plan and present it for approval.
+**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 3, read all logs in `.context/` (including the outcome previous tasks), and analyze the existing codebase. You will note that we have learning mechanisms but no system for storing the experiences they need to learn from. This task fills that critical gap. After your analysis, formulate your micro-plan and present it for approval.
 
 ---
 

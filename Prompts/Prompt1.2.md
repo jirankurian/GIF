@@ -1,6 +1,6 @@
 **Your Current Task: Task 1.2 - The Exoplanet Generator: The Realism Layer (Generative Noise)**
 
-**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. This involves reviewing the `/Rules`, the `/Reference/`, reading the `.context/` logs (including the log from Task 1.1), and analyzing the current codebase (specifically the `exoplanet_generator.py` file we just created). After your analysis, formulate your micro-plan for this task and present it for approval.
+**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. This involves reviewing the `/Rules`, the `\docs` directory, the `/Reference/`, reading the `.context/` logs (including the log from Task 1.1), and analyzing the current codebase (specifically the `exoplanet_generator.py` file we just created). After your analysis, formulate your micro-plan for this task and present it for approval.
 
 ---
 

@@ -1,6 +1,6 @@
 **Your Current Task: Task 1.4 - The ECG Generator: The Clinical Realism Layer**
 
-**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/`, the session logs in `.context/` (including the previous task), and the current project codebase, specifically the `ecg_generator.py` file. After your analysis, formulate your micro-plan for this task and present it for approval.
+**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `\docs` directory, the `/Reference/`, the session logs in `.context/` (including the previous task), and the current project codebase, specifically the `ecg_generator.py` file. After your analysis, formulate your micro-plan for this task and present it for approval.
 
 ---
 

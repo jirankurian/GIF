@@ -79,7 +79,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 import warnings
 
 from gif_framework.interfaces.base_interfaces import DecoderInterface, SpikeTrain, Action

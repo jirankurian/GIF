@@ -1,6 +1,6 @@
 **Your Current Task: Task 2.4 - Establishing a Rigorous Testing Suite**
 
-**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 2, read all logs in the `.context/` to confirm the completion of Tasks 2.1, 2.2, and 2.3, and analyze the existing project structure, noting the `interfaces`, `orchestrator`, and `core` modules. After your analysis, formulate your micro-plan for this task and present it for approval.
+**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 2, read all logs in the `.context/` to confirm the completion of Tasks 2.1, 2.2, and 2.3, and analyze the existing project structure, noting the `interfaces`, `orchestrator`, and `core` modules. After your analysis, formulate your micro-plan for this task and present it for approval.
 
 -----
 

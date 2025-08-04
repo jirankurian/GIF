@@ -29,7 +29,16 @@ from gif_framework.interfaces.base_interfaces import (
     SpikeTrain,
     Action
 )
-from tests.mocks import MockEncoder, MockDecoder, InvalidMock, create_test_raw_data
+from tests.mocks import (
+    MockEncoder,
+    MockDecoder,
+    InvalidMock,
+    FailingMockEncoder,
+    FailingMockDecoder,
+    PerformanceMockEncoder,
+    create_test_raw_data,
+    create_stress_test_data
+)
 
 # Import DU Core for integration testing
 try:
@@ -185,7 +194,7 @@ class TestGIFProcessingErrors:
         # Attach only decoder, not encoder
         gif.attach_decoder(MockDecoder())
         
-        with pytest.raises(RuntimeError, match="No encoder attached"):
+        with pytest.raises(RuntimeError, match="No encoder available"):
             gif.process_single_input("test_data")
 
 
@@ -348,7 +357,7 @@ class TestGIFIntegration:
         gif.attach_decoder(decoder)
 
         # Should raise an error due to size mismatch
-        with pytest.raises(RuntimeError, match="SNN processing failed"):
+        with pytest.raises(ValueError, match="Error during cognitive cycle processing"):
             gif.process_single_input("test_data")
 
     @pytest.mark.skipif(not DU_CORE_AVAILABLE, reason="snnTorch not available")
@@ -391,5 +400,196 @@ class TestGIFIntegration:
         
         # Don't attach any modules
         
-        with pytest.raises(RuntimeError, match="No encoder attached"):
+        with pytest.raises(RuntimeError, match="No encoder available"):
             gif.process_single_input("test_data")
+
+
+class TestGIFRobustnessAndErrorHandling:
+    """Test GIF orchestrator robustness and comprehensive error handling."""
+
+    @pytest.mark.skipif(not DU_CORE_AVAILABLE, reason="snnTorch not available")
+    def test_encoder_failure_handling(self):
+        """Test that GIF handles encoder failures gracefully."""
+        du_core = DU_Core_V1(input_size=10, hidden_sizes=[5], output_size=3)
+        gif = GIF(du_core)
+
+        # Attach failing encoder and working decoder
+        failing_encoder = FailingMockEncoder(failure_mode="encode")
+        gif.attach_encoder(failing_encoder)
+        gif.attach_decoder(MockDecoder())
+
+        # Processing should fail with encoder error
+        with pytest.raises(RuntimeError, match="Mock encoder encode failure"):
+            gif.process_single_input("test_data")
+
+    @pytest.mark.skipif(not DU_CORE_AVAILABLE, reason="snnTorch not available")
+    def test_decoder_failure_handling(self):
+        """Test that GIF handles decoder failures gracefully."""
+        du_core = DU_Core_V1(input_size=10, hidden_sizes=[5], output_size=3)
+        gif = GIF(du_core)
+
+        # Attach working encoder and failing decoder
+        gif.attach_encoder(MockEncoder(output_shape=(5, 1, 10)))
+        failing_decoder = FailingMockDecoder(failure_mode="decode")
+        gif.attach_decoder(failing_decoder)
+
+        # Processing should fail with decoder error
+        with pytest.raises(RuntimeError, match="Mock decoder decode failure"):
+            gif.process_single_input("test_data")
+
+    @pytest.mark.skipif(not DU_CORE_AVAILABLE, reason="snnTorch not available")
+    def test_du_core_failure_handling(self):
+        """Test that GIF handles DU Core failures gracefully."""
+        # Create a DU Core with incompatible dimensions
+        du_core = DU_Core_V1(input_size=5, hidden_sizes=[8], output_size=3)
+        gif = GIF(du_core)
+
+        # Attach encoder that produces wrong size output
+        wrong_size_encoder = MockEncoder(output_shape=(10, 1, 20))  # Wrong input size
+        gif.attach_encoder(wrong_size_encoder)
+        gif.attach_decoder(MockDecoder())
+
+        # Processing should fail with dimension mismatch
+        with pytest.raises(ValueError, match="spike_train input size"):
+            gif.process_single_input("test_data")
+
+    @pytest.mark.skipif(not DU_CORE_AVAILABLE, reason="snnTorch not available")
+    def test_module_lifecycle_management(self):
+        """Test module attachment, detachment, and replacement."""
+        du_core = DU_Core_V1(input_size=10, hidden_sizes=[5], output_size=3)
+        gif = GIF(du_core)
+
+        # Test initial state
+        assert gif._encoder is None
+        assert gif._decoder is None
+
+        # Test attachment
+        encoder1 = MockEncoder(output_shape=(5, 1, 10))
+        decoder1 = MockDecoder()
+        gif.attach_encoder(encoder1)
+        gif.attach_decoder(decoder1)
+
+        assert gif._encoder is encoder1
+        assert gif._decoder is decoder1
+
+        # Test replacement
+        encoder2 = MockEncoder(output_shape=(8, 1, 10))
+        decoder2 = MockDecoder()
+        gif.attach_encoder(encoder2)
+        gif.attach_decoder(decoder2)
+
+        assert gif._encoder is encoder2
+        assert gif._decoder is decoder2
+        assert gif._encoder is not encoder1
+        assert gif._decoder is not decoder1
+
+        # Test that system still works after replacement
+        result = gif.process_single_input("test_data")
+        assert result == "mock_action_success"
+
+    @pytest.mark.skipif(not DU_CORE_AVAILABLE, reason="snnTorch not available")
+    def test_system_state_consistency(self):
+        """Test that system state remains consistent across operations."""
+        du_core = DU_Core_V1(input_size=10, hidden_sizes=[5], output_size=3)
+        gif = GIF(du_core)
+
+        # Attach modules
+        encoder = MockEncoder(output_shape=(5, 1, 10))
+        decoder = MockDecoder()
+        gif.attach_encoder(encoder)
+        gif.attach_decoder(decoder)
+
+        # Get initial system config
+        initial_config = gif.get_system_config()
+
+        # Process multiple inputs
+        for i in range(5):
+            result = gif.process_single_input(f"test_data_{i}")
+            assert result == "mock_action_success"
+
+            # System config should remain consistent
+            current_config = gif.get_system_config()
+            assert current_config["du_core_config"]["input_size"] == initial_config["du_core_config"]["input_size"]
+            assert current_config["du_core_config"]["output_size"] == initial_config["du_core_config"]["output_size"]
+            assert current_config["encoder_config"]["encoder_type"] == initial_config["encoder_config"]["encoder_type"]
+            assert current_config["decoder_config"]["decoder_type"] == initial_config["decoder_config"]["decoder_type"]
+
+    @pytest.mark.skipif(not DU_CORE_AVAILABLE, reason="snnTorch not available")
+    def test_performance_under_load(self):
+        """Test GIF performance under various load conditions."""
+        du_core = DU_Core_V1(input_size=20, hidden_sizes=[30], output_size=10)
+        gif = GIF(du_core)
+
+        # Use performance monitoring encoder
+        perf_encoder = PerformanceMockEncoder(output_shape=(10, 1, 20), latency_ms=0.1)
+        gif.attach_encoder(perf_encoder)
+        gif.attach_decoder(MockDecoder())
+
+        # Process multiple inputs with timing
+        import time
+        start_time = time.time()
+
+        results = []
+        for i in range(20):
+            result = gif.process_single_input(f"load_test_{i}")
+            results.append(result)
+
+        end_time = time.time()
+        total_time = end_time - start_time
+
+        # Verify all results
+        assert len(results) == 20
+        assert all(result == "mock_action_success" for result in results)
+
+        # Check performance metrics
+        metrics = perf_encoder.get_performance_metrics()
+        assert metrics["total_calls"] == 20
+
+        # Performance should be reasonable
+        avg_time_per_cycle = total_time / 20
+        assert avg_time_per_cycle < 1.0, f"Average cycle time too high: {avg_time_per_cycle:.3f}s"
+
+    @pytest.mark.skipif(not DU_CORE_AVAILABLE, reason="snnTorch not available")
+    def test_stress_testing_with_large_data(self):
+        """Test GIF with large data inputs for stress testing."""
+        du_core = DU_Core_V1(input_size=100, hidden_sizes=[150], output_size=50)
+        gif = GIF(du_core)
+
+        # Attach modules capable of handling large data
+        large_encoder = MockEncoder(output_shape=(20, 4, 100))  # Large spike trains
+        gif.attach_encoder(large_encoder)
+        gif.attach_decoder(MockDecoder())
+
+        # Test with various large data sizes
+        for size in ["small", "medium", "large"]:
+            stress_data = create_stress_test_data(size)
+            result = gif.process_single_input(stress_data)
+            assert result == "mock_action_success"
+
+    @pytest.mark.skipif(not DU_CORE_AVAILABLE, reason="snnTorch not available")
+    def test_error_recovery_and_resilience(self):
+        """Test that GIF can recover from errors and continue operating."""
+        du_core = DU_Core_V1(input_size=10, hidden_sizes=[5], output_size=3)
+        gif = GIF(du_core)
+
+        # Start with failing encoder
+        failing_encoder = FailingMockEncoder(failure_mode="encode")
+        gif.attach_encoder(failing_encoder)
+        gif.attach_decoder(MockDecoder())
+
+        # First operation should fail
+        with pytest.raises(RuntimeError):
+            gif.process_single_input("test_data")
+
+        # Replace with working encoder
+        working_encoder = MockEncoder(output_shape=(5, 1, 10))
+        gif.attach_encoder(working_encoder)
+
+        # System should now work
+        result = gif.process_single_input("test_data")
+        assert result == "mock_action_success"
+
+        # Continue working for multiple operations
+        for i in range(3):
+            result = gif.process_single_input(f"recovery_test_{i}")
+            assert result == "mock_action_success"

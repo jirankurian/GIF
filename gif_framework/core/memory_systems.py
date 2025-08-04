@@ -95,7 +95,7 @@ into a truly adaptive, learning agent that builds and leverages its own experien
 import random
 import torch
 from collections import deque
-from typing import Any, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
 
 # =============================================================================
@@ -108,7 +108,7 @@ class ExperienceTuple(NamedTuple):
 
     An experience captures a complete interaction cycle within the GIF framework:
     the input that was processed, the internal state during processing, the output
-    that was produced, and the task context in which this occurred.
+    that was produced, the conceptual understanding formed, and the task context.
 
     This structure serves as the fundamental unit of episodic memory, enabling the
     system to store, retrieve, and learn from its past interactions. The immutable
@@ -119,7 +119,8 @@ class ExperienceTuple(NamedTuple):
     In biological neural networks, episodic memories are thought to be stored as
     patterns of synaptic connections that can be reactivated to recall past experiences.
     Our ExperienceTuple serves a similar function, capturing the essential information
-    needed to reconstruct and learn from past neural processing events.
+    needed to reconstruct and learn from past neural processing events, including
+    the conceptual understanding formed through Vector Symbolic Architecture.
 
     Fields:
     -------
@@ -157,15 +158,43 @@ class ExperienceTuple(NamedTuple):
         - "general_pattern_recognition"
         - "reward_learning_phase_1"
 
+    conceptual_state : Optional[torch.Tensor]
+        The conceptual representation formed by the DU Core during this experience,
+        represented as a hypervector from the Vector Symbolic Architecture (VSA).
+        Shape: [vsa_dimension] (typically 10,000 dimensions)
+
+        This field captures the "Deep Understanding" formed by the system - the
+        explicit conceptual knowledge and relationships discovered through VSA
+        operations like binding and bundling. It represents the system's semantic
+        interpretation of the experience.
+
+        When None, indicates that VSA was not active or conceptual state was not
+        captured for this experience (maintains backward compatibility).
+
+        Examples of conceptual states:
+        - Bound concepts: OBJECT ⊗ APPLE (object-attribute relationship)
+        - Bundled concepts: FRUIT + SWEET + RED (composite concept)
+        - Master state: Accumulated understanding across experiences
+
     Usage Examples:
     --------------
 
-    # Create an experience after processing input
+    # Create an experience after processing input (backward compatible)
     experience = ExperienceTuple(
         input_spikes=encoded_sensor_data,
         internal_state=None,  # Placeholder for future use
         output_spikes=neural_decision,
-        task_id="medical_diagnosis"
+        task_id="medical_diagnosis",
+        conceptual_state=None  # No VSA active
+    )
+
+    # Create an experience with VSA conceptual understanding
+    experience_with_vsa = ExperienceTuple(
+        input_spikes=encoded_sensor_data,
+        internal_state=None,
+        output_spikes=neural_decision,
+        task_id="medical_diagnosis",
+        conceptual_state=hypervector_representation  # VSA concept
     )
 
     # Access fields by name (more readable than tuple indexing)
@@ -197,6 +226,7 @@ class ExperienceTuple(NamedTuple):
     internal_state: Any
     output_spikes: torch.Tensor
     task_id: str
+    conceptual_state: Optional[torch.Tensor] = None
 
 
 # =============================================================================
@@ -298,7 +328,7 @@ class EpisodicMemory:
     - **Thread Safety:** Safe for concurrent read/write operations
     """
 
-    def __init__(self, capacity: int):
+    def __init__(self, capacity: int, performance_buffer_size: int = 100):
         """
         Initialize the episodic memory system with specified capacity.
 
@@ -312,37 +342,62 @@ class EpisodicMemory:
                           - Medium experiments: 10,000 - 100,000
                           - Large-scale systems: 100,000 - 1,000,000
 
+            performance_buffer_size (int, optional): Size of the performance tracking
+                                                    buffer for meta-plasticity. This buffer
+                                                    stores recent performance outcomes to
+                                                    calculate surprise signals. Default: 100.
+
         Raises:
             ValueError: If capacity is not a positive integer.
+            ValueError: If performance_buffer_size is not a positive integer.
 
         Note:
             The actual memory usage will depend on the size of the stored tensors.
             Each ExperienceTuple contains two tensors (input_spikes, output_spikes)
             plus minimal metadata. Plan capacity accordingly based on available RAM.
+
+            The performance buffer enables System Potentiation by tracking recent
+            outcomes to generate surprise signals for adaptive learning rates.
         """
         if not isinstance(capacity, int) or capacity <= 0:
             raise ValueError(f"Capacity must be a positive integer, got {capacity}")
 
+        if not isinstance(performance_buffer_size, int) or performance_buffer_size <= 0:
+            raise ValueError(f"Performance buffer size must be a positive integer, got {performance_buffer_size}")
+
         self.capacity = capacity
+        self.performance_buffer_size = performance_buffer_size
         self._experiences: deque = deque(maxlen=capacity)
 
-    def add(self, experience: ExperienceTuple) -> None:
+        # Performance tracking for meta-plasticity and System Potentiation
+        self.recent_performance_buffer: deque = deque(maxlen=performance_buffer_size)
+
+    def add(self, experience: ExperienceTuple, outcome: Optional[int] = None) -> None:
         """
-        Add a new experience to the episodic memory.
+        Add a new experience to the episodic memory with optional performance outcome.
 
         This method stores a new experience in the memory buffer. If the buffer
         is at capacity, the oldest experience is automatically removed to make
         room for the new one (FIFO behavior).
 
+        For System Potentiation, the method can also track performance outcomes
+        to enable meta-plasticity and adaptive learning rates.
+
         Args:
             experience (ExperienceTuple): The experience to store. Must be a valid
                                         ExperienceTuple with all required fields.
+            outcome (Optional[int]): Performance outcome for this experience.
+                                   - 1: Correct/successful prediction
+                                   - 0: Incorrect/failed prediction
+                                   - None: No performance tracking (backward compatibility)
 
         Raises:
             TypeError: If experience is not an ExperienceTuple.
             ValueError: If experience contains invalid data (e.g., non-tensor spikes).
+            ValueError: If outcome is not None, 0, or 1.
 
         Example:
+            # Basic usage (backward compatible)
             experience = ExperienceTuple(
                 input_spikes=torch.randn(50, 1, 100),
                 internal_state=None,
@@ -350,6 +405,10 @@ class EpisodicMemory:
                 task_id="classification_task"
             )
             memory.add(experience)
+
+            # With performance tracking for meta-plasticity
+            memory.add(experience, outcome=1)  # Correct prediction
+            memory.add(experience, outcome=0)  # Incorrect prediction
         """
         if not isinstance(experience, ExperienceTuple):
             raise TypeError(f"Expected ExperienceTuple, got {type(experience)}")
@@ -362,8 +421,88 @@ class EpisodicMemory:
         if not isinstance(experience.task_id, str):
             raise ValueError("task_id must be a string")
 
+        # Validate outcome if provided
+        if outcome is not None and outcome not in [0, 1]:
+            raise ValueError(f"Outcome must be None, 0 (incorrect), or 1 (correct), got {outcome}")
+
         # Add to memory (deque automatically handles capacity overflow)
         self._experiences.append(experience)
+
+        # Track performance outcome for meta-plasticity if provided
+        if outcome is not None:
+            self.recent_performance_buffer.append(outcome)
+
+    def get_surprise_signal(self) -> float:
+        """
+        Calculate surprise signal from recent performance for meta-plasticity.
+
+        The surprise signal quantifies how poorly the system is currently performing,
+        which drives adaptive learning rates in the System Potentiation mechanism.
+        High surprise (poor performance) increases plasticity to learn faster,
+        while low surprise (good performance) stabilizes learning to preserve knowledge.
+
+        Returns:
+            float: Surprise signal in range [0.0, 1.0]
+                  - 0.0: Perfect performance (all recent predictions correct)
+                  - 0.5: Random performance (50% correct)
+                  - 1.0: Worst performance (all recent predictions incorrect)
+
+        Note:
+            If no performance data is available, returns 0.5 (neutral surprise)
+            to avoid biasing the meta-learning process.
+
+        Example:
+            # After tracking some outcomes
+            memory.add(experience1, outcome=1)  # Correct
+            memory.add(experience2, outcome=1)  # Correct
+            memory.add(experience3, outcome=0)  # Incorrect
+
+            surprise = memory.get_surprise_signal()  # Returns ~0.33 (33% error rate)
+        """
+        if len(self.recent_performance_buffer) == 0:
+            # No performance data available - return neutral surprise
+            return 0.5
+
+        # Calculate success rate from recent outcomes
+        success_rate = sum(self.recent_performance_buffer) / len(self.recent_performance_buffer)
+
+        # Convert to error rate (surprise signal)
+        # High error rate = high surprise = need more plasticity
+        surprise_signal = 1.0 - success_rate
+
+        return surprise_signal
+
+    def get_performance_stats(self) -> Dict[str, float]:
+        """
+        Get detailed performance statistics for analysis and debugging.
+
+        Returns:
+            Dict[str, float]: Dictionary containing performance metrics:
+                - 'success_rate': Fraction of correct predictions [0.0, 1.0]
+                - 'error_rate': Fraction of incorrect predictions [0.0, 1.0]
+                - 'surprise_signal': Current surprise signal [0.0, 1.0]
+                - 'sample_count': Number of performance samples tracked
+                - 'buffer_utilization': Fraction of performance buffer filled [0.0, 1.0]
+        """
+        if len(self.recent_performance_buffer) == 0:
+            return {
+                'success_rate': 0.5,  # Neutral assumption
+                'error_rate': 0.5,
+                'surprise_signal': 0.5,
+                'sample_count': 0,
+                'buffer_utilization': 0.0
+            }
+
+        success_rate = sum(self.recent_performance_buffer) / len(self.recent_performance_buffer)
+        error_rate = 1.0 - success_rate
+
+        return {
+            'success_rate': success_rate,
+            'error_rate': error_rate,
+            'surprise_signal': error_rate,  # Same as get_surprise_signal()
+            'sample_count': len(self.recent_performance_buffer),
+            'buffer_utilization': len(self.recent_performance_buffer) / self.performance_buffer_size
+        }
 
     def sample(self, batch_size: int) -> List[ExperienceTuple]:
         """

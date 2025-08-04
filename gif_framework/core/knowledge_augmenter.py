@@ -82,6 +82,18 @@ except ImportError:
         "pip install sentence-transformers>=2.2.0"
     )
 
+# Web scraping dependencies with graceful fallback
+try:
+    import requests
+    from bs4 import BeautifulSoup
+    from duckduckgo_search import DDGS
+    WEB_SCRAPING_AVAILABLE = True
+except ImportError:
+    WEB_SCRAPING_AVAILABLE = False
+    requests = None
+    BeautifulSoup = None
+    DDGS = None
+
 
 class KnowledgeAugmenter:
     """
@@ -174,6 +186,7 @@ class KnowledgeAugmenter:
         self._milvus_connected = False
         self._neo4j_connected = False
         self._embedding_loaded = False
+        self._web_scraping_available = WEB_SCRAPING_AVAILABLE
         
         # Initialize all components
         self._initialize_embedding_model()
@@ -305,13 +318,16 @@ class KnowledgeAugmenter:
 
         This method implements the RAG pipeline by converting the query text into
         vector embeddings and performing semantic similarity search against the
-        Milvus vector database to find the most relevant document chunks.
+        Milvus vector database to find the most relevant document chunks. If no
+        local results are found or if the database is unavailable, it automatically
+        falls back to web-based retrieval for real-time information.
 
         The RAG process follows these steps:
         1. Convert query text to vector embedding using sentence transformer
         2. Perform vector similarity search in Milvus collection
         3. Retrieve top-k most similar document chunks
-        4. Return raw text content for integration into DU Core processing
+        4. If no results found, fallback to web search and content extraction
+        5. Return raw text content for integration into DU Core processing
 
         Args:
             query_text (str): The query text to search for relevant context
@@ -376,11 +392,24 @@ class KnowledgeAugmenter:
                 if text_content:
                     retrieved_texts.append(text_content)
 
-            self.logger.info(f"Retrieved {len(retrieved_texts)} relevant documents")
-            return retrieved_texts
+            self.logger.info(f"Retrieved {len(retrieved_texts)} relevant documents from vector database")
+
+            # If we have good results from vector database, return them
+            if retrieved_texts:
+                return retrieved_texts
+
+            # Fallback to web search if no local results found
+            self.logger.info("No local results found, falling back to web search")
+            return self.retrieve_web_context(query_text, top_k)
 
         except Exception as e:
             self.logger.error(f"Error during RAG retrieval: {e}")
+
+            # Fallback to web search on error
+            if self._web_scraping_available:
+                self.logger.info("Falling back to web search due to database error")
+                return self.retrieve_web_context(query_text, top_k)
+
             return []
 
     def update_knowledge_graph(self, structured_knowledge: Dict[str, Any]) -> None:
@@ -714,6 +743,246 @@ class KnowledgeAugmenter:
             self.logger.error(f"Error adding documents to vector store: {e}")
             return False
 
+    def retrieve_context(self, query: str) -> str:
+        """
+        Primary method to get context, prioritizing the web.
+
+        This method implements the enhanced RAG pipeline that prioritizes live web data
+        over local database content. It first attempts to retrieve current information
+        from the web, and only falls back to the local vector database if web retrieval
+        fails or returns insufficient results.
+
+        This prioritization ensures that the DU Core has access to the most current
+        information available, which is crucial for tasks requiring up-to-date knowledge.
+
+        Args:
+            query (str): Search query for context retrieval
+
+        Returns:
+            str: Retrieved context text, prioritizing web sources
+
+        Example:
+            # Get current context with web priority
+            context = augmenter.retrieve_context("latest exoplanet discoveries")
+            # Will first search web, then fallback to local database if needed
+        """
+        try:
+            # Step 1: Try web retrieval first (prioritized)
+            web_context = self.retrieve_web_context(query)
+
+            # Check if web retrieval was successful
+            if web_context and len(web_context) > 0:
+                # Filter out failed retrievals
+                valid_contexts = [ctx for ctx in web_context
+                                if ctx and "Failed to retrieve" not in ctx and "No web results" not in ctx]
+
+                if valid_contexts:
+                    self.logger.info(f"Retrieved {len(valid_contexts)} web contexts for query: {query[:50]}...")
+                    return " ".join(valid_contexts)
+
+            # Step 2: Fallback to existing database RAG
+            self.logger.info("Web retrieval unsuccessful, falling back to database RAG")
+            database_contexts = self.retrieve_unstructured_context(query)
+
+            if database_contexts:
+                self.logger.info(f"Retrieved {len(database_contexts)} database contexts for query: {query[:50]}...")
+                return " ".join(database_contexts)
+
+            # Step 3: No context available
+            self.logger.warning(f"No context available for query: {query[:50]}...")
+            return "No relevant context found."
+
+        except Exception as e:
+            self.logger.error(f"Error during context retrieval: {e}")
+            return "Context retrieval failed."
+
+    def retrieve_web_context(
+        self,
+        query: str,
+        max_results: int = 3,
+        timeout: int = 10
+    ) -> List[str]:
+        """
+        Retrieve relevant context from the web using real-time web scraping.
+
+        This method implements web-based RAG by searching the internet for relevant
+        information and extracting text content from web pages. It serves as a
+        fallback or supplement to the local vector database when external knowledge
+        is needed.
+
+        The web RAG process follows these steps:
+        1. Perform web search using search engines or APIs
+        2. Extract URLs from search results
+        3. Scrape and extract text content from relevant web pages
+        4. Return cleaned text content for integration into DU Core processing
+
+        Args:
+            query (str): Search query for web retrieval
+            max_results (int): Maximum number of web pages to retrieve
+            timeout (int): Timeout in seconds for web requests
+
+        Returns:
+            List[str]: List of extracted text content from web pages
+
+        Example:
+            # Retrieve real-time context from the web
+            context = augmenter.retrieve_web_context(
+                query="latest exoplanet discoveries 2024",
+                max_results=3
+            )
+
+            # Context will contain current web content like:
+            # ["Recent discoveries by JWST have revealed...",
+            #  "The TESS mission continues to find new exoplanets...",
+            #  "Breakthrough in atmospheric analysis techniques..."]
+        """
+        # Validate inputs
+        if not query or not query.strip():
+            raise ValueError("query cannot be empty")
+        if max_results <= 0:
+            raise ValueError("max_results must be positive")
+        if timeout <= 0:
+            raise ValueError("timeout must be positive")
+
+        # Check if web scraping is available
+        if not self._web_scraping_available:
+            self.logger.warning("Web scraping dependencies not available, returning empty context")
+            return []
+
+        try:
+            self.logger.info(f"Retrieving web context for query: {query[:100]}...")
+
+            # Step 1: Search the web for relevant URLs
+            search_results = self._search_web(query, max_results)
+
+            if not search_results:
+                self.logger.warning("No web search results found")
+                return []
+
+            # Step 2: Extract content from web pages
+            web_contexts = []
+            for result in search_results[:max_results]:
+                url = result.get('url', '')
+                if url:
+                    content = self._extract_text_from_url(url, timeout)
+                    if content:
+                        web_contexts.append(content)
+
+            self.logger.info(f"Retrieved {len(web_contexts)} web contexts")
+            return web_contexts
+
+        except Exception as e:
+            self.logger.error(f"Error during web context retrieval: {e}")
+            return []
+
+    def _search_web(self, query: str, max_results: int = 3) -> List[Dict[str, str]]:
+        """
+        Search the web for relevant URLs using DuckDuckGo search.
+
+        This method performs a web search to find relevant URLs for the given query.
+        It uses the duckduckgo-search library as a privacy-friendly search engine
+        that doesn't require API keys or have rate limiting issues.
+
+        Args:
+            query (str): Search query
+            max_results (int): Maximum number of results to return
+
+        Returns:
+            List[Dict[str, str]]: List of search results with 'title' and 'url' keys
+        """
+        try:
+            # Use DuckDuckGo search library (no API key required)
+            if DDGS is None:
+                self.logger.warning("DuckDuckGo search not available, falling back to empty results")
+                return []
+
+            with DDGS() as ddgs:
+                search_results = list(ddgs.text(query, max_results=max_results))
+
+                results = []
+                for result in search_results:
+                    if 'href' in result and 'title' in result:
+                        results.append({
+                            'title': result['title'],
+                            'url': result['href']
+                        })
+
+            self.logger.debug(f"Found {len(results)} search results for query: {query}")
+            return results
+
+        except Exception as e:
+            self.logger.error(f"Error during web search: {e}")
+            return []
+
+    def _extract_text_from_url(self, url: str, timeout: int = 10) -> str:
+        """
+        Extract clean text content from a web page URL.
+
+        This method fetches the content of a web page and extracts the main
+        text content while filtering out navigation, ads, and other non-content
+        elements.
+
+        Args:
+            url (str): URL to extract content from
+            timeout (int): Request timeout in seconds
+
+        Returns:
+            str: Cleaned text content from the web page
+        """
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+
+            response = requests.get(url, headers=headers, timeout=timeout)
+            response.raise_for_status()
+
+            # Parse HTML content
+            soup = BeautifulSoup(response.content, 'html.parser')
+
+            # Remove script and style elements
+            for script in soup(["script", "style", "nav", "header", "footer", "aside"]):
+                script.decompose()
+
+            # Extract text from main content areas
+            content_selectors = [
+                'main', 'article', '.content', '.main-content',
+                '.post-content', '.entry-content', '#content'
+            ]
+
+            text_content = ""
+            for selector in content_selectors:
+                content_elem = soup.select_one(selector)
+                if content_elem:
+                    text_content = content_elem.get_text(separator=' ', strip=True)
+                    break
+
+            # Fallback to body if no main content found
+            if not text_content:
+                body = soup.find('body')
+                if body:
+                    text_content = body.get_text(separator=' ', strip=True)
+
+            # Clean up the text
+            lines = text_content.split('\n')
+            cleaned_lines = []
+            for line in lines:
+                line = line.strip()
+                if line and len(line) > 20:  # Filter out very short lines
+                    cleaned_lines.append(line)
+
+            # Limit content length to avoid overwhelming the system
+            cleaned_text = ' '.join(cleaned_lines)
+            if len(cleaned_text) > 2000:
+                cleaned_text = cleaned_text[:2000] + "..."
+
+            self.logger.debug(f"Extracted {len(cleaned_text)} characters from {url}")
+            return cleaned_text
+
+        except Exception as e:
+            self.logger.error(f"Error extracting text from {url}: {e}")
+            return ""
+
     def get_status(self) -> Dict[str, Any]:
         """
         Get the current status of the Knowledge Augmenter.
@@ -725,9 +994,22 @@ class KnowledgeAugmenter:
             "milvus_connected": self._milvus_connected,
             "neo4j_connected": self._neo4j_connected,
             "embedding_loaded": self._embedding_loaded,
+            "web_scraping_available": self._web_scraping_available,
             "rag_available": self._milvus_connected and self._embedding_loaded,
             "cag_available": self._neo4j_connected,
+            "web_rag_available": self._web_scraping_available,
             "embedding_model": self.embedding_model_name,
+            "knowledge_augmentation_ready": (
+                self._milvus_connected and
+                self._neo4j_connected and
+                self._embedding_loaded
+            ),
+            "full_capabilities": (
+                self._milvus_connected and
+                self._neo4j_connected and
+                self._embedding_loaded and
+                self._web_scraping_available
+            ),
             "milvus_config": {k: v for k, v in self.milvus_config.items() if k != "password"},
             "neo4j_config": {k: v for k, v in self.neo4j_config.items() if k != "password"}
         }
@@ -762,7 +1044,9 @@ class KnowledgeAugmenter:
             f"  embedding_model: {self.embedding_model_name}\n"
             f"  rag_available: {status['rag_available']}\n"
             f"  cag_available: {status['cag_available']}\n"
+            f"  web_rag_available: {status['web_rag_available']}\n"
             f"  milvus_connected: {status['milvus_connected']}\n"
             f"  neo4j_connected: {status['neo4j_connected']}\n"
+            f"  full_capabilities: {status['full_capabilities']}\n"
             f")"
         )

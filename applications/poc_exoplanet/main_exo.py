@@ -92,7 +92,7 @@ from gif_framework.training.trainer import Continual_Trainer
 # Application-specific components
 from applications.poc_exoplanet.encoders.light_curve_encoder import LightCurveEncoder
 from applications.poc_exoplanet.decoders.exoplanet_decoder import ExoplanetDecoder
-from applications.poc_exoplanet.config_exo import get_config, create_output_directories
+from applications.poc_exoplanet.config_exo import get_config, create_output_directories, get_device, move_to_device
 
 # Data generation and simulation
 from data_generators.exoplanet_generator import RealisticExoplanetGenerator
@@ -220,24 +220,29 @@ def generate_datasets(config: Dict[str, Any], logger: logging.Logger) -> Tuple[L
 # COMPONENT INITIALIZATION
 # =============================================================================
 
-def initialize_components(config: Dict[str, Any], logger: logging.Logger) -> Tuple[GIF, Continual_Trainer, NeuromorphicSimulator]:
+def initialize_components(config: Dict[str, Any], logger: logging.Logger) -> Tuple[Any, Any, Any, torch.device]:
     """
-    Initialize all GIF framework components.
+    Initialize all GIF framework components with GPU support.
 
     Args:
         config: Experiment configuration.
         logger: Logger instance.
 
     Returns:
-        Tuple: (gif_model, trainer, simulator) initialized components.
+        Tuple: (encoder, decoder, du_core, device) initialized components.
     """
     logger.info("Initializing GIF framework components...")
 
-    # Initialize encoder
+    # Initialize device
+    device = get_device(config["training"]["device"])
+    logger.info(f"  ✓ Device initialized: {device}")
+
+    # Initialize encoder with device support
     encoder_config = config["encoder"]
     encoder = LightCurveEncoder(
         threshold=encoder_config["threshold"],
-        normalize_input=encoder_config["normalize_input"]
+        normalize_input=encoder_config["normalize_input"],
+        device=str(device)
     )
     logger.info(f"  ✓ LightCurveEncoder initialized (threshold={encoder_config['threshold']:.2e})")
 
@@ -281,10 +286,15 @@ def initialize_components(config: Dict[str, Any], logger: logging.Logger) -> Tup
     )
     logger.info(f"  ✓ DU_Core_V1 initialized ({arch_config['input_size']} → {arch_config['hidden_sizes']} → {arch_config['output_size']})")
 
-    return encoder, decoder, du_core
+    # Move models to device (MPS for Apple Silicon)
+    du_core = du_core.to(device)
+    decoder = decoder.to(device)
+    logger.info(f"  ✓ Models moved to device: {device}")
+
+    return encoder, decoder, du_core, device
 
 
-def assemble_gif_model(encoder, decoder, du_core, config: Dict[str, Any], logger: logging.Logger) -> Tuple[GIF, Continual_Trainer, NeuromorphicSimulator]:
+def assemble_gif_model(encoder, decoder, du_core, device: torch.device, config: Dict[str, Any], logger: logging.Logger) -> Tuple[GIF, Continual_Trainer, NeuromorphicSimulator]:
     """
     Assemble the complete GIF model with training and simulation components.
 
@@ -292,6 +302,7 @@ def assemble_gif_model(encoder, decoder, du_core, config: Dict[str, Any], logger
         encoder: Initialized encoder component.
         decoder: Initialized decoder component.
         du_core: Initialized DU Core component.
+        device: Device for training (MPS, CUDA, or CPU).
         config: Experiment configuration.
         logger: Logger instance.
 
@@ -304,7 +315,7 @@ def assemble_gif_model(encoder, decoder, du_core, config: Dict[str, Any], logger
     gif_model = GIF(du_core)
     gif_model.attach_encoder(encoder)
     gif_model.attach_decoder(decoder)
-    logger.info("  ✓ GIF orchestrator assembled with encoder and decoder")
+    logger.info(f"  ✓ GIF orchestrator assembled with encoder and decoder on {device}")
 
     # Initialize optimizer
     train_config = config["training"]
@@ -332,7 +343,8 @@ def assemble_gif_model(encoder, decoder, du_core, config: Dict[str, Any], logger
         gif_model=gif_model,
         optimizer=optimizer,
         criterion=criterion,
-        memory_batch_size=train_config["memory_batch_size"]
+        memory_batch_size=train_config["memory_batch_size"],
+        gradient_clip_norm=train_config.get("gradient_clip_norm", None)
     )
     logger.info(f"  ✓ Continual_Trainer initialized (memory_batch_size={train_config['memory_batch_size']})")
 
@@ -351,7 +363,7 @@ def assemble_gif_model(encoder, decoder, du_core, config: Dict[str, Any], logger
 # TRAINING PIPELINE
 # =============================================================================
 
-def train_model(gif_model: GIF, trainer: Continual_Trainer, training_data: List, config: Dict[str, Any], logger: logging.Logger) -> Dict[str, List]:
+def train_model(gif_model: GIF, trainer: Continual_Trainer, training_data: List, device: torch.device, config: Dict[str, Any], logger: logging.Logger) -> Dict[str, List]:
     """
     Execute the complete training pipeline.
 
@@ -405,23 +417,24 @@ def train_model(gif_model: GIF, trainer: Continual_Trainer, training_data: List,
 
             for light_curve, target_label in batch_data:
                 try:
-                    # Process through GIF model
-                    prediction = gif_model.process_single_input(light_curve)
+                    # Prepare target tensor and move to device
+                    target_tensor = torch.tensor([target_label], dtype=torch.long).to(device)
 
-                    # Convert prediction to tensor for loss calculation
-                    if isinstance(prediction, int):
-                        pred_tensor = torch.tensor([prediction], dtype=torch.long)
-                    else:
-                        pred_tensor = torch.tensor([int(prediction)], dtype=torch.long)
-
-                    target_tensor = torch.tensor([target_label], dtype=torch.long)
-
-                    # Training step
+                    # Training step - trainer handles GIF processing internally
                     loss = trainer.train_step(light_curve, target_tensor, task_id)
                     batch_losses.append(loss)
 
+                    # Get prediction for accuracy tracking
+                    prediction = gif_model.process_single_input(light_curve)
+
+                    # Convert prediction to comparable format
+                    if isinstance(prediction, int):
+                        pred_value = prediction
+                    else:
+                        pred_value = int(prediction)
+
                     # Track accuracy
-                    correct_predictions += int(pred_tensor.item() == target_label)
+                    correct_predictions += int(pred_value == target_label)
                     total_predictions += 1
 
                 except Exception as e:
@@ -778,13 +791,13 @@ def main() -> None:
         training_data, test_data = generate_datasets(config, logger)
 
         # Initialize components
-        encoder, decoder, du_core = initialize_components(config, logger)
+        encoder, decoder, du_core, device = initialize_components(config, logger)
 
         # Assemble GIF model
-        gif_model, trainer, simulator = assemble_gif_model(encoder, decoder, du_core, config, logger)
+        gif_model, trainer, simulator = assemble_gif_model(encoder, decoder, du_core, device, config, logger)
 
         # Train model
-        training_logs = train_model(gif_model, trainer, training_data, config, logger)
+        training_logs = train_model(gif_model, trainer, training_data, device, config, logger)
 
         # Evaluate model
         evaluation_results = evaluate_model(gif_model, simulator, test_data, config, logger)

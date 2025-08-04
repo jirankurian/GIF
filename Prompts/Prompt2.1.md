@@ -1,6 +1,6 @@
 **Your Current Task: Task 2.1 - Defining the Core Architectural Contracts (Interfaces)**
 
-**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 2, read all logs in the `.context/` to understand our progress, and analyze the current project structure. After your analysis, formulate a precise micro-plan for this task and present it for my approval.
+**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 2, read all logs in the `.context/` to understand our progress, and analyze the current project structure. After your analysis, formulate a precise micro-plan for this task and present it for my approval.
 
 ---
 

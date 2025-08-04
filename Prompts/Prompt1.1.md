@@ -1,6 +1,6 @@
 **Your Current Task: Task 1.1 - The Exoplanet Generator: Core Physics Engine**
 
-**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Read everything in the `/Rules` directory, the `/Reference/` directory, and the `.context/` directory. After your analysis, formulate your micro-plan for this task and present it for approval.
+**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Read everything in the `/Rules` directory, the `/docs` directory, the `/Reference/` directory, and the `.context/` directory. After your analysis, formulate your micro-plan for this task and present it for approval.
 
 ---
 

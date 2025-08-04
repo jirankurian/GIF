@@ -1,6 +1,6 @@
 **Your Current Task: Task 3.3 - Building the Continual Learning Engine (GEM Integration)**
 
-**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 3, read all logs in `.context/` (which confirm the creation of the RTL rules and the memory system), and analyze the existing codebase. You will see that the `DU_Core`, `rtl_mechanisms`, and `memory_systems` are all separate. This task will unite them into a functional learning system. After your analysis, formulate your micro-plan and present it for approval.
+**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 3, read all logs in `.context/` (which confirm the creation of the RTL rules and the memory system), and analyze the existing codebase. You will see that the `DU_Core`, `rtl_mechanisms`, and `memory_systems` are all separate. This task will unite them into a functional learning system. After your analysis, formulate your micro-plan and present it for approval.
 
 ---
 

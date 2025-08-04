@@ -127,9 +127,10 @@ class LightCurveEncoder(EncoderInterface):
     """
     
     def __init__(
-        self, 
-        threshold: float = 1e-4, 
-        normalize_input: bool = True
+        self,
+        threshold: float = 1e-4,
+        normalize_input: bool = True,
+        device: str = "cpu"
     ) -> None:
         """
         Initialize the light curve encoder.
@@ -141,6 +142,7 @@ class LightCurveEncoder(EncoderInterface):
             normalize_input (bool): Whether to normalize input flux to zero mean and
                                   unit variance before encoding. Recommended for
                                   consistent behavior across different data sources.
+            device (str): Device to create tensors on ("cpu", "cuda", "mps"). Default: "cpu".
                                   
         Raises:
             ValueError: If threshold is not positive.
@@ -157,6 +159,8 @@ class LightCurveEncoder(EncoderInterface):
             
         self.threshold = float(threshold)
         self.normalize_input = bool(normalize_input)
+        self.device = torch.device(device)
+        self.device = torch.device(device)
         
         # Statistics for monitoring and debugging
         self._last_encoding_stats = {
@@ -265,17 +269,38 @@ class LightCurveEncoder(EncoderInterface):
             np.ndarray: Normalized flux values.
         """
         if len(flux_array) < 2:
-            warnings.warn("Cannot normalize flux array with less than 2 points")
+            warnings.warn(
+                "Cannot normalize flux array with less than 2 points",
+                UserWarning,
+                stacklevel=2
+            )
             return flux_array
 
         mean_flux = np.mean(flux_array)
         std_flux = np.std(flux_array)
 
         if std_flux == 0:
-            warnings.warn("Flux array has zero variance, normalization skipped")
+            warnings.warn(
+                "Flux array has zero variance, normalization skipped",
+                UserWarning,
+                stacklevel=2
+            )
             return flux_array - mean_flux
 
-        return (flux_array - mean_flux) / std_flux
+        # Handle potential NaN/inf values in normalization
+        with np.errstate(invalid='ignore'):
+            normalized = (flux_array - mean_flux) / std_flux
+
+        # Check for invalid values and handle them
+        if np.any(~np.isfinite(normalized)):
+            warnings.warn(
+                "Invalid values encountered during normalization, returning mean-centered data",
+                RuntimeWarning,
+                stacklevel=2
+            )
+            return flux_array - mean_flux
+
+        return normalized
 
     def _calculate_flux_deltas(self, flux_array: np.ndarray) -> np.ndarray:
         """
@@ -307,7 +332,7 @@ class LightCurveEncoder(EncoderInterface):
             torch.Tensor: Two-channel spike train [num_steps, 2].
         """
         num_steps = len(flux_deltas)
-        spike_train = torch.zeros(num_steps, 2, dtype=torch.float32)
+        spike_train = torch.zeros(num_steps, 2, dtype=torch.float32, device=self.device)
 
         # Channel 0: Positive changes (brightness increases)
         positive_spikes = flux_deltas > self.threshold

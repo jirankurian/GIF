@@ -6,7 +6,7 @@
 
 ### **Task Objective**
 
-Your goal is to build the **`KnowledgeAugmenter`** module. This module will give our DU Core the ability to dynamically query external databases to retrieve relevant information in real-time. This system will implement the hybrid **Retrieval-Augmented Generation (RAG)** and **Context-Augmented Generation (CAG)** workflow outlined in our research, effectively giving our AI the ability to "look things up" to solve problems.
+Your goal is to build the **`KnowledgeAugmenter`** module. This module will give our DU Core the ability to dynamically query external websites to retrieve relevant information in real-time. This system will implement the hybrid **Retrieval-Augmented Generation (RAG)** and **Context-Augmented Generation (CAG)** workflow outlined in our research, effectively giving our AI the ability to "look things up" to solve problems.
 
 ---
 
@@ -28,6 +28,7 @@ Your goal is to build the **`KnowledgeAugmenter`** module. This module will give
 
 * **Action:** First, you must add the necessary database clients and embedding libraries to our `pyproject.toml` configuration file.
 * **Required Libraries:**
+    * `requests`: For browsing the web or other top class libraries for the searching and reading data from the web.
     * `pymilvus`: The official Python client for the Milvus vector database.
     * `neo4j`: The official Python driver for the Neo4j graph database.
     * `sentence-transformers`: A high-performance library for creating the vector embeddings needed for semantic search.
@@ -37,6 +38,7 @@ Your goal is to build the **`KnowledgeAugmenter`** module. This module will give
 * **Action:** You will implement the main `KnowledgeAugmenter` class.
 * **`__init__(self, milvus_config: dict, neo4j_config: dict, embedding_model_name: str)`:**
     * The initializer will take configuration dictionaries for connecting to the Milvus and Neo4j databases (e.g., host, port, credentials).
+    * The initializer will also work for website (do the required updates)
     * It will also take the name of a pre-trained `sentence-transformers` model (e.g., `'all-MiniLM-L6-v2'`).
     * Inside, it will initialize the database clients and load the embedding model.
 
@@ -47,6 +49,7 @@ Your goal is to build the **`KnowledgeAugmenter`** module. This module will give
         2.  Use the loaded `sentence-transformers` model to convert the `query_text` into a vector embedding.
         3.  Use the `milvus` client's `search()` method to find the `top_k` most similar document vectors in your pre-populated Milvus collection.
         4.  Return a list containing the raw text of the `top_k` retrieved document chunks.
+        5.  Use things to scrape the web for the relevant information.
 
 * **The CAG Methods:**
 

@@ -1,6 +1,6 @@
 **Your Current Task: Task 4.3 - Assembling the Full Exoplanet POC Pipeline**
 
-**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 4, read all logs in the `.context/` to confirm the completion of Tasks 4.1 and 4.2, and analyze the existing project structure. You will see that we have all the necessary components (`data_generator`, `encoder`, `decoder`, `du_core`, `trainer`, `simulator`) but they are not yet connected into a single, runnable application. This task builds that final connection. After your analysis, formulate your micro-plan and present it for approval.
+**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 4, read all logs in the `.context/` to confirm the completion of Tasks 4.1 and 4.2, and analyze the existing project structure. You will see that we have all the necessary components (`data_generator`, `encoder`, `decoder`, `du_core`, `trainer`, `simulator`) but they are not yet connected into a single, runnable application. This task builds that final connection. After your analysis, formulate your micro-plan and present it for approval.
 
 -----
 

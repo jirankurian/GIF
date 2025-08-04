@@ -19,13 +19,19 @@ The central orchestrator that manages all knowledge access operations:
 
 #### RAG (Retrieval-Augmented Generation)
 - **Purpose**: Fast semantic search over vast document collections
-- **Technology**: Vector embeddings + Milvus database
+- **Technology**: Vector embeddings + Milvus database + Web scraping
 - **Use Case**: "Google Search" for AI - find relevant information quickly
+- **Fallback**: Automatic web search when local database is empty
 
-#### CAG (Context-Augmented Generation)  
+#### CAG (Context-Augmented Generation)
 - **Purpose**: Structured knowledge storage and retrieval
 - **Technology**: Knowledge graphs + Neo4j database
 - **Use Case**: "Second Brain" for AI - organized, queryable knowledge
+
+#### Web RAG (Real-time Web Retrieval)
+- **Purpose**: Access current information from the internet
+- **Technology**: Web scraping + content extraction + search engines
+- **Use Case**: Real-time knowledge for current events and latest information
 
 ## Technical Implementation
 
@@ -104,6 +110,51 @@ augmenter.update_knowledge_graph({
 
 # Retrieve structured context
 entity_context = augmenter.retrieve_structured_context("Kepler-90")
+```
+
+### Web RAG Operations
+
+```python
+# Real-time web context retrieval
+web_context = augmenter.retrieve_web_context(
+    query="latest exoplanet discoveries 2024",
+    max_results=3,
+    timeout=10
+)
+
+# Automatic fallback in retrieve_unstructured_context
+# If local database is empty, automatically searches the web
+context = augmenter.retrieve_unstructured_context(
+    query_text="current space telescope missions",
+    top_k=5
+)
+# This will first try Milvus, then fallback to web search if needed
+```
+
+### Web Scraping Features
+
+The Knowledge Augmenter includes advanced web scraping capabilities:
+
+- **Search Engine Integration**: Uses DuckDuckGo for privacy-friendly web search
+- **Content Extraction**: Intelligent text extraction from web pages
+- **Automatic Fallback**: Seamlessly switches to web search when local data is unavailable
+- **Content Filtering**: Removes navigation, ads, and non-content elements
+- **Length Limiting**: Prevents overwhelming the system with too much content
+
+#### Example: Real-time Information Retrieval
+
+```python
+# Get current information about a topic
+current_info = augmenter.retrieve_web_context(
+    query="James Webb Space Telescope latest discoveries",
+    max_results=5
+)
+
+# The system will:
+# 1. Search DuckDuckGo for relevant pages
+# 2. Extract clean text content from each page
+# 3. Return a list of relevant text chunks
+# 4. Handle errors gracefully with empty results
 ```
 
 ## Integration with DU Core v2
@@ -264,6 +315,70 @@ print(f"CAG Available: {status['cag_available']}")
 if not status['milvus_connected']:
     logger.warning("Milvus connection lost - RAG disabled")
 ```
+
+## Enhanced Capabilities (Phase 6.2 Enhancements)
+
+### Web Scraping Integration
+
+The Knowledge Augmentation System now includes comprehensive web scraping capabilities that extend the RAG pipeline to real-time web information:
+
+#### Key Features
+
+1. **Automatic Fallback**: When local vector database returns no results, the system automatically searches the web
+2. **Privacy-Friendly Search**: Uses DuckDuckGo search engine (no API keys required)
+3. **Intelligent Content Extraction**: Removes ads, navigation, and focuses on main content
+4. **Error Resilience**: Graceful handling of network errors and malformed pages
+5. **Content Filtering**: Limits content length and filters out low-quality text
+
+#### Technical Implementation
+
+```python
+# Web scraping workflow
+def retrieve_web_context(query, max_results=3):
+    # 1. Search web using DuckDuckGo
+    search_results = self._search_web(query, max_results)
+
+    # 2. Extract content from each URL
+    web_contexts = []
+    for result in search_results:
+        content = self._extract_text_from_url(result['url'])
+        if content:
+            web_contexts.append(content)
+
+    return web_contexts
+```
+
+#### Status Monitoring
+
+The enhanced system provides comprehensive status monitoring:
+
+```python
+status = augmenter.get_status()
+print(f"RAG Available: {status['rag_available']}")           # Local vector DB
+print(f"CAG Available: {status['cag_available']}")           # Knowledge graph
+print(f"Web RAG Available: {status['web_rag_available']}")   # Web scraping
+print(f"Full Capabilities: {status['full_capabilities']}")   # All systems
+```
+
+### Comprehensive Testing
+
+The system includes a complete test suite with 23 test cases covering:
+
+- **Initialization Testing**: Database connections and configuration validation
+- **RAG Functionality**: Vector search and retrieval operations
+- **CAG Functionality**: Knowledge graph operations and queries
+- **Web Scraping**: Real-time web content retrieval and extraction
+- **Integration Testing**: DU_Core_V2 integration and uncertainty detection
+- **Error Handling**: Graceful degradation and edge case management
+- **Document Processing**: Vector store operations and content management
+
+### Performance Characteristics
+
+- **Local RAG**: Sub-second retrieval from vector database
+- **Web RAG**: 2-10 seconds depending on network and content complexity
+- **Hybrid Approach**: Optimal balance of speed and comprehensiveness
+- **Memory Efficient**: Streaming content processing for large documents
+- **Scalable**: Handles thousands of documents in vector store
 
 ## Future Extensions
 

@@ -1,0 +1,23 @@
+====================================================================================================
+TABLE IV: EXOPLANET DETECTION PERFORMANCE COMPARISON
+====================================================================================================
+
+Model                Acc      Prec     Rec      F1       Energy       Size       Params       Time      
+--------------------------------------------------------------------------------------------------------
+CNN Baseline         0.815    0.853    0.779    0.814    2.98e+00     41.0       10,751,042   0.0       
+Transformer Baseline 0.880    0.900    0.865    0.882    5.61e+00     5.7        1,486,082    0.0       
+GIF-DU Framework     0.480    0.000    0.000    0.000    0.00e+00     0.5        100,000      1800.0    
+
+NEUROMORPHIC CHARACTERISTICS:
+----------------------------------------
+GIF-DU Total SynOps: 16,785,792
+GIF-DU Sparsity Level: 0.000
+GIF-DU Energy Efficiency Ratio: 1000.0x
+
+PERFORMANCE SUMMARY:
+------------------------------
+Best Accuracy: Transformer Baseline (0.880)
+Best F1-Score: Transformer Baseline (0.882)
+Most Energy Efficient: GIF-DU Framework (0.00e+00 J/sample)
+
+====================================================================================================

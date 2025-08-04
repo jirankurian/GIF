@@ -28,7 +28,14 @@ from gif_framework.interfaces.base_interfaces import (
     SpikeTrain,
     Action
 )
-from tests.mocks import MockEncoder, MockDecoder, InvalidMock
+from tests.mocks import (
+    MockEncoder,
+    MockDecoder,
+    InvalidMock,
+    FailingMockEncoder,
+    FailingMockDecoder,
+    PerformanceMockEncoder
+)
 
 
 class TestTypeAliases:
@@ -300,3 +307,140 @@ class TestInterfaceContractEnforcement:
         
         action = decoder.decode(spike_train)
         assert action == "custom_result"
+
+
+class TestAdvancedContractEnforcement:
+    """Test advanced interface contract enforcement and validation."""
+
+    def test_encoder_method_signature_validation(self):
+        """Test that encoder methods have correct signatures."""
+        encoder = MockEncoder()
+
+        # Test encode method signature
+        import inspect
+        encode_sig = inspect.signature(encoder.encode)
+        assert len(encode_sig.parameters) == 1  # Only raw_data parameter
+        assert 'raw_data' in encode_sig.parameters
+
+        # Test get_config method signature
+        config_sig = inspect.signature(encoder.get_config)
+        assert len(config_sig.parameters) == 0  # No parameters
+
+        # Test calibrate method signature
+        calibrate_sig = inspect.signature(encoder.calibrate)
+        assert len(calibrate_sig.parameters) == 1  # Only sample_data parameter
+        assert 'sample_data' in calibrate_sig.parameters
+
+    def test_decoder_method_signature_validation(self):
+        """Test that decoder methods have correct signatures."""
+        decoder = MockDecoder()
+
+        # Test decode method signature
+        import inspect
+        decode_sig = inspect.signature(decoder.decode)
+        assert len(decode_sig.parameters) == 1  # Only spike_train parameter
+        assert 'spike_train' in decode_sig.parameters
+
+        # Test get_config method signature
+        config_sig = inspect.signature(decoder.get_config)
+        assert len(config_sig.parameters) == 0  # No parameters
+
+    def test_interface_inheritance_hierarchy(self):
+        """Test that interfaces properly inherit from ABC."""
+        # EncoderInterface should be abstract
+        assert issubclass(EncoderInterface, ABC)
+        assert issubclass(DecoderInterface, ABC)
+
+        # Should not be able to instantiate abstract interfaces directly
+        with pytest.raises(TypeError):
+            EncoderInterface()
+
+        with pytest.raises(TypeError):
+            DecoderInterface()
+
+    def test_contract_violation_detection(self):
+        """Test that contract violations are properly detected."""
+        # Test incomplete encoder implementation
+        class IncompleteEncoder(EncoderInterface):
+            def encode(self, raw_data: Any) -> SpikeTrain:
+                return torch.zeros(5, 1, 10)
+            # Missing get_config and calibrate methods
+
+        # Should not be able to instantiate incomplete implementation
+        with pytest.raises(TypeError):
+            IncompleteEncoder()
+
+        # Test incomplete decoder implementation
+        class IncompleteDecoder(DecoderInterface):
+            def decode(self, spike_train: SpikeTrain) -> Action:
+                return "result"
+            # Missing get_config method
+
+        # Should not be able to instantiate incomplete implementation
+        with pytest.raises(TypeError):
+            IncompleteDecoder()
+
+    def test_runtime_contract_enforcement(self):
+        """Test runtime enforcement of interface contracts."""
+        encoder = MockEncoder()
+        decoder = MockDecoder()
+
+        # Test that methods return expected types
+        spike_train = encoder.encode("test_data")
+        assert isinstance(spike_train, torch.Tensor)
+
+        config = encoder.get_config()
+        assert isinstance(config, dict)
+
+        action = decoder.decode(spike_train)
+        # Action can be any type, so just check it's not None
+        assert action is not None
+
+        decoder_config = decoder.get_config()
+        assert isinstance(decoder_config, dict)
+
+    def test_error_handling_in_implementations(self):
+        """Test error handling in interface implementations."""
+        # Test failing encoder
+        failing_encoder = FailingMockEncoder(failure_mode="encode")
+        with pytest.raises(RuntimeError, match="Mock encoder encode failure"):
+            failing_encoder.encode("test")
+
+        failing_encoder_config = FailingMockEncoder(failure_mode="config")
+        with pytest.raises(RuntimeError, match="Mock encoder config failure"):
+            failing_encoder_config.get_config()
+
+        failing_encoder_calibrate = FailingMockEncoder(failure_mode="calibrate")
+        with pytest.raises(RuntimeError, match="Mock encoder calibrate failure"):
+            failing_encoder_calibrate.calibrate("test")
+
+        # Test failing decoder
+        failing_decoder = FailingMockDecoder(failure_mode="decode")
+        with pytest.raises(RuntimeError, match="Mock decoder decode failure"):
+            failing_decoder.decode(torch.zeros(5, 1, 10))
+
+        failing_decoder_config = FailingMockDecoder(failure_mode="config")
+        with pytest.raises(RuntimeError, match="Mock decoder config failure"):
+            failing_decoder_config.get_config()
+
+    def test_performance_monitoring_interface(self):
+        """Test performance monitoring capabilities in interfaces."""
+        perf_encoder = PerformanceMockEncoder(latency_ms=1.0)
+
+        # Perform multiple encodings
+        for i in range(5):
+            spike_train = perf_encoder.encode(f"test_data_{i}")
+            assert isinstance(spike_train, torch.Tensor)
+
+        # Check performance metrics
+        metrics = perf_encoder.get_performance_metrics()
+        assert metrics["total_calls"] == 5
+        assert len(metrics["call_times"]) == 5
+        assert metrics["avg_time"] > 0
+        assert metrics["min_time"] >= 0
+        assert metrics["max_time"] >= metrics["min_time"]
+
+        # Check config includes performance data
+        config = perf_encoder.get_config()
+        assert "total_calls" in config
+        assert "avg_encode_time" in config

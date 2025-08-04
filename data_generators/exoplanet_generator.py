@@ -385,6 +385,7 @@ class StellarVariabilityModel:
         """
         self.Q0 = Q0
         self.dQ = dQ
+        self._seed = seed
         self.rng = np.random.default_rng(seed)
 
     def generate_variability(
@@ -442,10 +443,11 @@ class StellarVariabilityModel:
             # Create RotationTerm kernel for quasi-periodic stellar rotation
             # This kernel models the rotation signal with realistic damping
             kernel = terms.RotationTerm(
-                amp=amplitude**2,  # Variance (amplitude squared)
+                sigma=amplitude,  # Standard deviation of the process
                 period=stellar_rotation_period,
                 Q0=self.Q0,
-                dQ=self.dQ
+                dQ=self.dQ,
+                f=0.1  # Fractional amplitude of secondary mode
             )
 
             # Initialize Gaussian Process with the rotation kernel
@@ -456,7 +458,10 @@ class StellarVariabilityModel:
 
             # Generate a single realization of the stellar variability
             # This creates a quasi-periodic signal with realistic correlations
-            variability = gp.sample(size=1, random_state=self.rng)[0]
+            # Set numpy random seed to ensure reproducibility
+            if hasattr(self, '_seed') and self._seed is not None:
+                np.random.seed(self._seed)
+            variability = gp.sample(size=1)[0]
 
             return variability
 
@@ -658,6 +663,7 @@ class RealisticExoplanetGenerator:
         self.noise_color_alpha = noise_color_alpha
 
         # Initialize all components with consistent seeding
+        self.rng = np.random.default_rng(seed)
         self.parameter_sampler = ParameterSampler(seed=seed)
         self.stellar_model = StellarVariabilityModel(seed=seed)
         self.noise_model = InstrumentalNoiseModel(seed=seed)
@@ -723,7 +729,7 @@ class RealisticExoplanetGenerator:
 
             # 4. Generate stellar variability
             # Use orbital period as proxy for stellar rotation period
-            stellar_rotation_period = params.per * (1.0 + 0.5 * np.random.random())  # Add some variation
+            stellar_rotation_period = params.per * (1.0 + 0.5 * self.rng.random())  # Add some variation
             stellar_variability = self.stellar_model.generate_variability(
                 time_array,
                 stellar_rotation_period,

@@ -1,6 +1,6 @@
 **Your Current Task: Task 4.1 - Developing the Neuromorphic Hardware Simulator**
 
-**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 4, read all logs in the `.context/` to confirm the completion of Phase 3, and analyze the current codebase. You will note that while we have built SNNs, our training and execution logic does not yet account for the specific way neuromorphic hardware operates. This task builds that simulation layer. After your analysis, formulate your micro-plan and present it for approval.
+**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 4, read all logs in the `.context/` to confirm the completion of Phase 3, and analyze the current codebase. You will note that while we have built SNNs, our training and execution logic does not yet account for the specific way neuromorphic hardware operates. This task builds that simulation layer. After your analysis, formulate your micro-plan and present it for approval.
 
 ---
 

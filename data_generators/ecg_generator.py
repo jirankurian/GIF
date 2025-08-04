@@ -136,14 +136,15 @@ class ECGPhysicsEngine:
         # PQRST wave parameters from McSharry et al. (2003)
         # Each tuple contains (theta_i, a_i, b_i) where:
         # - theta_i: angular position of wave peak (radians)
-        # - a_i: amplitude scaling factor
+        # - a_i: amplitude scaling factor (scaled for proper ECG morphology)
         # - b_i: width parameter (standard deviation)
+        # Note: Amplitudes scaled to produce realistic ECG voltages (mV range)
         self.pqrst_params = {
-            'P': (-np.pi/3, 1.2, 0.25),    # P wave: atrial depolarization
-            'Q': (-np.pi/12, -5.0, 0.1),   # Q wave: early ventricular depolarization
-            'R': (0.0, 30.0, 0.1),         # R wave: main ventricular depolarization
-            'S': (np.pi/12, -7.5, 0.1),    # S wave: late ventricular depolarization
-            'T': (np.pi/2, 0.75, 0.4),     # T wave: ventricular repolarization
+            'P': (-np.pi/3, 1.0, 0.25),    # P wave: atrial depolarization
+            'Q': (-np.pi/12, -4.0, 0.1),   # Q wave: early ventricular depolarization
+            'R': (0.0, 20.0, 0.1),         # R wave: main ventricular depolarization
+            'S': (np.pi/12, -6.0, 0.1),    # S wave: late ventricular depolarization
+            'T': (np.pi/2, 0.6, 0.4),      # T wave: ventricular repolarization
         }
 
     def _ecg_model_odes(self, t: float, state: List[float]) -> List[float]:
@@ -287,6 +288,17 @@ class ECGPhysicsEngine:
 
             # Extract the ECG signal (x-component of the solution)
             ecg_voltage = solution.y[0]  # x(t) represents the ECG signal
+
+            # Center the signal around zero (remove DC offset)
+            ecg_voltage = ecg_voltage - np.mean(ecg_voltage)
+
+            # Scale to realistic ECG amplitude range (typically 0.5-2.0 mV for R-wave)
+            # Target peak-to-peak amplitude of ~22 mV (typical ECG range)
+            current_amplitude = np.max(ecg_voltage) - np.min(ecg_voltage)
+            if current_amplitude > 0:
+                target_amplitude = 22.0  # mV
+                scaling_factor = target_amplitude / current_amplitude
+                ecg_voltage = ecg_voltage * scaling_factor
 
             # Create structured output DataFrame
             ecg_df = pl.DataFrame({

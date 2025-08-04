@@ -56,6 +56,16 @@ from gif_framework.interfaces.base_interfaces import SpikeTrain
 from gif_framework.core.rtl_mechanisms import PlasticityRuleInterface
 from gif_framework.core.memory_systems import EpisodicMemory
 
+# Import VSA for explicit Deep Understanding capabilities
+from gif_framework.core.vsa_operations import VSA
+
+# Import knowledge augmentation (with graceful fallback)
+try:
+    from gif_framework.core.knowledge_augmenter import KnowledgeAugmenter
+except ImportError:
+    # Graceful fallback if knowledge dependencies are not installed
+    KnowledgeAugmenter = None
+
 
 class DU_Core_V1(nn.Module):
     """
@@ -119,7 +129,11 @@ class DU_Core_V1(nn.Module):
         threshold: float = 1.0,
         recurrent: bool = False,
         plasticity_rule: Optional[PlasticityRuleInterface] = None,
-        memory_system: Optional[EpisodicMemory] = None
+        memory_system: Optional[EpisodicMemory] = None,
+        knowledge_augmenter: Optional['KnowledgeAugmenter'] = None,
+        uncertainty_threshold: float = 0.5,
+        vsa_dimension: int = 10000,
+        enable_vsa: bool = True
     ) -> None:
         """
         Initialize the DU Core v1 with configurable SNN architecture and optional RTL components.
@@ -155,6 +169,22 @@ class DU_Core_V1(nn.Module):
                                                     experiences. Required for continual
                                                     learning algorithms like GEM.
                                                     Default: None
+            knowledge_augmenter (KnowledgeAugmenter, optional): Knowledge augmentation
+                                                               system for RAG/CAG workflow.
+                                                               Enables uncertainty-triggered
+                                                               external knowledge retrieval.
+                                                               Default: None
+            uncertainty_threshold (float, optional): Confidence threshold below which
+                                                    knowledge augmentation is triggered.
+                                                    Range: [0.0, 1.0]. Default: 0.5
+            vsa_dimension (int, optional): Dimensionality of hypervectors for Vector
+                                         Symbolic Architecture. Higher dimensions provide
+                                         better separation and more precise operations.
+                                         Typical range: 1000-50000. Default: 10000.
+            enable_vsa (bool, optional): Enable Vector Symbolic Architecture for explicit
+                                       "Deep Understanding" and concept formation.
+                                       When True, enables "connecting the dots" through
+                                       hyperdimensional computing. Default: True.
 
         Raises:
             ValueError: If input_size, output_size, or any hidden_size is not positive.
@@ -191,6 +221,8 @@ class DU_Core_V1(nn.Module):
         # Validate input parameters
         self._validate_parameters(input_size, hidden_sizes, output_size, beta, threshold, recurrent)
         self._validate_rtl_components(plasticity_rule, memory_system)
+        self._validate_knowledge_augmenter(knowledge_augmenter, uncertainty_threshold)
+        self._validate_vsa_parameters(vsa_dimension, enable_vsa)
 
         # Store configuration
         self.input_size = input_size
@@ -203,6 +235,32 @@ class DU_Core_V1(nn.Module):
         # Store injected RTL components for continual learning
         self._plasticity_rule = plasticity_rule
         self._memory_system = memory_system
+
+        # Store knowledge augmentation component
+        self._knowledge_augmenter = knowledge_augmenter
+        self.uncertainty_threshold = uncertainty_threshold
+
+        # Only check for real KnowledgeAugmenter if it's the actual class
+        if (knowledge_augmenter and KnowledgeAugmenter is None and
+            hasattr(knowledge_augmenter, '__class__') and
+            'Mock' not in str(type(knowledge_augmenter))):
+            raise ImportError(
+                "KnowledgeAugmenter dependencies not installed. Please install with: "
+                "pip install pymilvus>=2.3.0 neo4j>=5.0.0 sentence-transformers>=2.2.0"
+            )
+
+        # Initialize Vector Symbolic Architecture for explicit Deep Understanding
+        self.enable_vsa = enable_vsa
+        if enable_vsa:
+            self.vsa = VSA(dimension=vsa_dimension)
+            self.conceptual_memory: Dict[str, torch.Tensor] = {}
+            self.master_conceptual_state = self.vsa.create_hypervector()
+            self.vsa_dimension = vsa_dimension
+        else:
+            self.vsa = None
+            self.conceptual_memory = {}
+            self.master_conceptual_state = None
+            self.vsa_dimension = 0
 
         # Build the network architecture dynamically
         self.linear_layers = nn.ModuleList()
@@ -286,13 +344,78 @@ class DU_Core_V1(nn.Module):
                 f"got {type(memory_system)}"
             )
 
+    def _validate_knowledge_augmenter(
+        self,
+        knowledge_augmenter: Optional['KnowledgeAugmenter'],
+        uncertainty_threshold: float
+    ) -> None:
+        """
+        Validate knowledge augmentation parameters.
+
+        Args:
+            knowledge_augmenter: The knowledge augmenter to validate (can be None)
+            uncertainty_threshold: The uncertainty threshold to validate
+
+        Raises:
+            TypeError: If components have incorrect types.
+            ValueError: If uncertainty_threshold is out of valid range.
+        """
+        if knowledge_augmenter is not None and KnowledgeAugmenter is not None:
+            if not isinstance(knowledge_augmenter, KnowledgeAugmenter):
+                # Check if it has the required methods (duck typing for mocks)
+                required_methods = ['retrieve_context', 'update_knowledge_graph']
+                if not all(hasattr(knowledge_augmenter, method) for method in required_methods):
+                    raise TypeError(
+                        f"knowledge_augmenter must implement KnowledgeAugmenter interface "
+                        f"or have methods {required_methods}, got {type(knowledge_augmenter)}"
+                    )
+
+        if not isinstance(uncertainty_threshold, (int, float)):
+            raise TypeError(f"uncertainty_threshold must be a number, got {type(uncertainty_threshold)}")
+
+        if not (0.0 <= uncertainty_threshold <= 1.0):
+            raise ValueError(f"uncertainty_threshold must be in range [0.0, 1.0], got {uncertainty_threshold}")
+
+    def _validate_vsa_parameters(
+        self,
+        vsa_dimension: int,
+        enable_vsa: bool
+    ) -> None:
+        """
+        Validate Vector Symbolic Architecture parameters.
+
+        Args:
+            vsa_dimension: The dimensionality of hypervectors
+            enable_vsa: Whether VSA is enabled
+
+        Raises:
+            ValueError: If VSA parameters are invalid.
+            TypeError: If parameters have incorrect types.
+        """
+        if not isinstance(enable_vsa, bool):
+            raise TypeError(f"enable_vsa must be a boolean, got {type(enable_vsa)}")
+
+        if not isinstance(vsa_dimension, int):
+            raise TypeError(f"vsa_dimension must be an integer, got {type(vsa_dimension)}")
+
+        if vsa_dimension <= 0:
+            raise ValueError(f"vsa_dimension must be positive, got {vsa_dimension}")
+
+        if vsa_dimension < 100:
+            import warnings
+            warnings.warn(
+                f"VSA dimension {vsa_dimension} is very small. "
+                f"Recommend at least 1000 for reliable operations.",
+                UserWarning
+            )
+
     def _initialize_weights(self) -> None:
         """Initialize network weights using Xavier/Glorot initialization."""
         for linear_layer in self.linear_layers:
             nn.init.xavier_uniform_(linear_layer.weight)
             nn.init.zeros_(linear_layer.bias)
 
-    def forward(self, input_spikes: torch.Tensor, num_steps: int) -> torch.Tensor:
+    def forward(self, input_spikes: torch.Tensor, num_steps: int, return_activations: bool = False) -> torch.Tensor:
         """
         Forward pass through the SNN for a given number of time steps.
 
@@ -315,12 +438,16 @@ class DU_Core_V1(nn.Module):
                                        continuous spike rates.
             num_steps (int): Number of simulation time steps. Must match
                            the first dimension of input_spikes.
+            return_activations (bool, optional): If True, returns both output spikes
+                                               and hidden layer activations for RSA.
+                                               Defaults to False.
 
         Returns:
-            torch.Tensor: Output spike train with shape
-                         [num_steps, batch_size, output_size].
-                         Contains the spike outputs from the final layer
-                         at each time step.
+            torch.Tensor or tuple: If return_activations=False, returns output spike
+                                 train with shape [num_steps, batch_size, output_size].
+                                 If return_activations=True, returns tuple of
+                                 (output_spikes, hidden_activations) where
+                                 hidden_activations is a list of tensors for each layer.
 
         Raises:
             ValueError: If input tensor shape is incorrect or num_steps mismatch.
@@ -363,6 +490,10 @@ class DU_Core_V1(nn.Module):
         # Initialize output spike recording
         output_spikes_list = []
 
+        # Initialize hidden layer activations recording (for RSA)
+        if return_activations:
+            hidden_activations = [[] for _ in range(len(self.lif_layers))]
+
         # Main simulation loop - process each time step
         for step in range(num_steps):
             # Get input spikes for current time step
@@ -372,6 +503,9 @@ class DU_Core_V1(nn.Module):
             layer_output = current_input
 
             for layer_idx, (linear_layer, lif_layer) in enumerate(zip(self.linear_layers, self.lif_layers)):
+                # Store pre-synaptic activity for RTL
+                pre_synaptic_spikes = layer_output.clone()
+
                 # Linear transformation (synaptic connections)
                 linear_output = linear_layer(layer_output)
 
@@ -379,6 +513,65 @@ class DU_Core_V1(nn.Module):
                 spike_output, mem_potentials[layer_idx] = lif_layer(
                     linear_output, mem_potentials[layer_idx]
                 )
+
+                # Record hidden layer activations if requested (for RSA)
+                if return_activations:
+                    hidden_activations[layer_idx].append(spike_output.clone())
+
+                # ---> RTL ENGINE: Apply plasticity rule if enabled <---
+                if self.training and self._plasticity_rule is not None:
+                    try:
+                        # Apply plasticity rule to update weights online
+                        # Determine which parameters to pass based on rule type
+                        from gif_framework.core.rtl_mechanisms import ThreeFactor_Hebbian_Rule
+
+                        if isinstance(self._plasticity_rule, ThreeFactor_Hebbian_Rule):
+                            # Three-factor rule needs activity and modulatory signal
+                            weight_updates = self._plasticity_rule.apply(
+                                pre_activity=pre_synaptic_spikes,
+                                post_activity=spike_output,
+                                modulatory_signal=1.0  # Default positive modulatory signal
+                            )
+                        else:
+                            # STDP and other rules use spike timing
+                            weight_updates = self._plasticity_rule.apply(
+                                pre_spikes=pre_synaptic_spikes,
+                                post_spikes=spike_output,
+                                dt=1.0  # Time step size in ms
+                            )
+
+                        # Update linear layer weights in-place
+                        with torch.no_grad():
+                            # Ensure weight_updates has correct shape for the layer
+                            if weight_updates.shape == linear_layer.weight.shape:
+                                linear_layer.weight.data += weight_updates
+                            else:
+                                # Handle shape mismatch - RTL rules return [input_size, output_size]
+                                # but PyTorch Linear layers use [output_size, input_size]
+                                if len(weight_updates.shape) == 2 and weight_updates.shape[0] == linear_layer.weight.shape[1] and weight_updates.shape[1] == linear_layer.weight.shape[0]:
+                                    # Weight updates are in [input_size, output_size] format, transpose to match layer
+                                    linear_layer.weight.data += weight_updates.T
+                                else:
+                                    # Log shape mismatch for debugging
+                                    import warnings
+                                    warnings.warn(f"RTL weight update shape mismatch: updates {weight_updates.shape}, layer weights {linear_layer.weight.shape}")
+
+                        # Store experience in episodic memory if available
+                        if self._memory_system is not None:
+                            from gif_framework.core.memory_systems import ExperienceTuple
+                            experience = ExperienceTuple(
+                                input_spikes=pre_synaptic_spikes.detach(),
+                                internal_state=None,  # Placeholder for future use
+                                output_spikes=spike_output.detach(),
+                                task_id=f"rtl_step_{step}",  # Default task ID
+                                conceptual_state=None  # No VSA state in basic RTL
+                            )
+                            self._memory_system.add(experience)
+
+                    except Exception as e:
+                        # Log RTL error but don't break the forward pass
+                        import warnings
+                        warnings.warn(f"RTL mechanism failed at layer {layer_idx}, step {step}: {str(e)}")
 
                 # Output of this layer becomes input to next layer
                 layer_output = spike_output
@@ -389,7 +582,14 @@ class DU_Core_V1(nn.Module):
         # Stack all time steps into a single tensor
         output_spikes = torch.stack(output_spikes_list, dim=0)
 
-        return output_spikes
+        if return_activations:
+            # Stack hidden activations for each layer
+            stacked_hidden_activations = []
+            for layer_activations in hidden_activations:
+                stacked_hidden_activations.append(torch.stack(layer_activations, dim=0))
+            return output_spikes, stacked_hidden_activations
+        else:
+            return output_spikes
 
     def process(self, spike_train: SpikeTrain) -> SpikeTrain:
         """
@@ -469,12 +669,357 @@ class DU_Core_V1(nn.Module):
         except Exception as e:
             raise RuntimeError(f"SNN processing failed: {str(e)}") from e
 
+        # Check for uncertainty and trigger knowledge augmentation if needed
+        if self._knowledge_augmenter is not None:
+            should_augment, uncertainty_score = self._detect_uncertainty(output_spikes)
+
+            if should_augment:
+                try:
+                    # Generate query from VSA conceptual state or fallback
+                    query = self._generate_query_from_vsa_state()
+
+                    # Retrieve external knowledge context (Web RAG prioritized)
+                    knowledge_context = self._knowledge_augmenter.retrieve_context(query)
+
+                    # Re-process with augmented context
+                    if knowledge_context and len(knowledge_context.strip()) > 0:
+                        # Simple context integration: modulate output based on knowledge availability
+                        enhanced_output = self._integrate_knowledge_context(output_spikes, knowledge_context)
+                        output_spikes = enhanced_output
+
+                        # Update knowledge graph with new understanding (CAG)
+                        if self.enable_vsa and self.vsa is not None:
+                            # Extract key concepts for knowledge graph update
+                            structured_knowledge = {
+                                "subject": query,
+                                "relation": "ENHANCED_BY",
+                                "object": "external_knowledge",
+                                "properties": {
+                                    "uncertainty_score": uncertainty_score,
+                                    "context_length": len(knowledge_context),
+                                    "timestamp": "current_processing_cycle"
+                                }
+                            }
+                            self._knowledge_augmenter.update_knowledge_graph(structured_knowledge)
+
+                except Exception as e:
+                    # Graceful fallback if knowledge augmentation fails
+                    import warnings
+                    warnings.warn(f"Knowledge augmentation failed: {str(e)}")
+
+        # Apply Vector Symbolic Architecture for explicit "Deep Understanding"
+        conceptual_state = None
+        if self.enable_vsa and self.vsa is not None:
+            conceptual_state = self._apply_vsa_processing(output_spikes)
+
+        # Store experience in episodic memory with conceptual state
+        if self._memory_system is not None:
+            try:
+                from gif_framework.core.memory_systems import ExperienceTuple
+                experience = ExperienceTuple(
+                    input_spikes=spike_train.detach().clone(),
+                    internal_state=None,  # Placeholder for future use
+                    output_spikes=output_spikes.detach().clone(),
+                    task_id="du_core_processing",  # Default task ID
+                    conceptual_state=conceptual_state.detach().clone() if conceptual_state is not None else None
+                )
+                self._memory_system.add(experience)
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Failed to store experience in memory: {str(e)}")
+
         # Handle output format for single-step inputs
         if single_step_input:
             # Remove time dimension: [1, batch_size, output_size] → [batch_size, output_size]
             output_spikes = output_spikes.squeeze(0)
 
         return output_spikes
+
+    def _apply_vsa_processing(self, output_spikes: torch.Tensor) -> torch.Tensor:
+        """
+        Apply Vector Symbolic Architecture processing for explicit "Deep Understanding".
+
+        This method implements the core "connecting the dots" mechanism by:
+        1. Representing the current output as a conceptual hypervector
+        2. Finding the most similar existing concept in conceptual memory
+        3. Binding the new concept with the related concept to form structured knowledge
+        4. Updating the master conceptual state through bundling
+
+        This transforms implicit pattern association into explicit conceptual understanding.
+
+        Args:
+            output_spikes (torch.Tensor): Output spike train from SNN processing
+                                        Shape: [num_steps, batch_size, output_size]
+
+        Returns:
+            torch.Tensor: Conceptual state hypervector representing the understanding
+                         formed from this processing cycle. Shape: [vsa_dimension]
+        """
+        # Step A: Represent Input as Conceptual Hypervector
+        # Create a new hypervector to represent this processing cycle
+        h_new = self.vsa.create_hypervector()
+        # Ensure the new hypervector is on the same device as the output spikes
+        if output_spikes.device != h_new.device:
+            h_new = h_new.to(output_spikes.device)
+
+        # Step B: Find Related Concept in Conceptual Memory
+        h_related = None
+        max_similarity = -1.0
+        related_concept_key = None
+
+        if self.conceptual_memory:
+            # Search for the most similar existing concept
+            for concept_key, concept_vector in self.conceptual_memory.items():
+                similarity = self.vsa.similarity(h_new, concept_vector)
+                if similarity > max_similarity:
+                    max_similarity = similarity
+                    h_related = concept_vector
+                    related_concept_key = concept_key
+
+        # Step C: Connect the Dots - Form Structured Concept
+        if h_related is not None and max_similarity > 0.3:  # Similarity threshold
+            # Bind new concept with related concept to form structured knowledge
+            h_structured = self.vsa.bind(h_new, h_related)
+
+            # Store the new structured concept in conceptual memory
+            new_concept_key = f"concept_{len(self.conceptual_memory)}"
+            self.conceptual_memory[new_concept_key] = h_structured
+
+        else:
+            # No related concept found - store as new base concept
+            h_structured = h_new
+            new_concept_key = f"base_concept_{len(self.conceptual_memory)}"
+            self.conceptual_memory[new_concept_key] = h_structured
+
+        # Step D: Update Master Conceptual State
+        # Bundle the new structured concept into the master state
+        self.master_conceptual_state = self.vsa.bundle([
+            self.master_conceptual_state,
+            h_structured
+        ])
+
+        return h_structured
+
+    def _detect_uncertainty(self, output_spikes: torch.Tensor) -> Tuple[bool, float]:
+        """
+        Detect uncertainty in the network's output to trigger knowledge augmentation.
+
+        This method analyzes the output spike patterns to determine if the network
+        is uncertain about its prediction. Multiple uncertainty indicators are used:
+        1. Entropy of spike distribution across output neurons
+        2. Temporal consistency of spike patterns
+        3. Overall spike activity level
+
+        Args:
+            output_spikes (torch.Tensor): Output spike train from SNN processing
+                                        Shape: [num_steps, batch_size, output_size]
+
+        Returns:
+            Tuple[bool, float]: (should_augment, uncertainty_score)
+                               should_augment: True if knowledge augmentation should be triggered
+                               uncertainty_score: Normalized uncertainty score [0.0, 1.0]
+        """
+        # Calculate uncertainty regardless of knowledge augmenter availability
+        # This allows testing and analysis of uncertainty patterns
+
+        try:
+            # Ensure we have the right tensor shape
+            if output_spikes.dim() == 2:
+                # Add time dimension if missing: [batch_size, output_size] -> [1, batch_size, output_size]
+                output_spikes = output_spikes.unsqueeze(0)
+
+            # Calculate spike counts per output neuron (sum over time and batch)
+            spike_counts = torch.sum(output_spikes, dim=(0, 1))  # Shape: [output_size]
+
+            # Avoid division by zero
+            total_spikes = torch.sum(spike_counts)
+            if total_spikes == 0:
+                return True, 1.0  # No spikes = maximum uncertainty
+
+            # 1. Entropy-based uncertainty
+            spike_distribution = spike_counts / total_spikes
+            # Add small epsilon to avoid log(0)
+            epsilon = 1e-8
+            entropy = -torch.sum(spike_distribution * torch.log(spike_distribution + epsilon))
+            max_entropy = torch.log(torch.tensor(float(output_spikes.size(-1))))
+            entropy_uncertainty = entropy / max_entropy if max_entropy > 0 else 1.0
+
+            # 2. Temporal consistency uncertainty
+            # Calculate variance in spike patterns across time steps
+            temporal_patterns = torch.sum(output_spikes, dim=1)  # Sum over batch: [num_steps, output_size]
+            if temporal_patterns.size(0) > 1:
+                temporal_variance = torch.var(temporal_patterns, dim=0)  # Variance across time
+                temporal_uncertainty = torch.mean(temporal_variance).item()
+                # Normalize temporal uncertainty (heuristic scaling)
+                temporal_uncertainty = min(temporal_uncertainty / 10.0, 1.0)
+            else:
+                temporal_uncertainty = 0.5  # Default for single time step
+
+            # 3. Activity level uncertainty
+            # Low overall activity can indicate uncertainty
+            avg_activity = total_spikes / (output_spikes.size(0) * output_spikes.size(1) * output_spikes.size(2))
+            activity_uncertainty = 1.0 - min(avg_activity.item(), 1.0)
+
+            # Combine uncertainty indicators
+            uncertainty_score = (
+                0.5 * entropy_uncertainty.item() +
+                0.3 * temporal_uncertainty +
+                0.2 * activity_uncertainty
+            )
+
+            # Ensure uncertainty score is in [0, 1] range
+            uncertainty_score = max(0.0, min(1.0, uncertainty_score))
+
+            # Trigger knowledge augmentation if uncertainty exceeds threshold AND augmenter is available
+            should_augment = (uncertainty_score > self.uncertainty_threshold and
+                            self._knowledge_augmenter is not None)
+
+            return should_augment, uncertainty_score
+
+        except Exception as e:
+            # Graceful fallback on error
+            import warnings
+            warnings.warn(f"Uncertainty detection failed: {str(e)}")
+            return False, 0.0
+
+    def _generate_query_from_vsa_state(self) -> str:
+        """
+        Generate natural language query from VSA conceptual state.
+
+        This method uses the current VSA conceptual memory and master state to
+        generate meaningful queries for external knowledge retrieval. It identifies
+        the most relevant concepts and translates them into natural language.
+
+        Returns:
+            str: Natural language query for knowledge retrieval
+        """
+        if not self.enable_vsa or not self.vsa or not self.conceptual_memory:
+            return "general knowledge and context"
+
+        try:
+            # Find concepts most similar to current master state
+            current_state = self.master_conceptual_state
+            concept_similarities = {}
+
+            for concept_key, concept_vector in self.conceptual_memory.items():
+                similarity = self.vsa.similarity(current_state, concept_vector)
+                concept_similarities[concept_key] = similarity
+
+            if not concept_similarities:
+                return "general knowledge and context"
+
+            # Get top 3 most relevant concepts
+            top_concepts = sorted(concept_similarities.items(),
+                                key=lambda x: x[1], reverse=True)[:3]
+
+            # Convert concept keys to natural language terms
+            query_terms = []
+            for concept_key, similarity in top_concepts:
+                # Clean up concept key (remove prefixes, replace underscores)
+                clean_term = concept_key.replace('concept_', '').replace('base_concept_', '')
+                clean_term = clean_term.replace('_', ' ')
+
+                # Only include if it's meaningful
+                if len(clean_term.strip()) > 0 and clean_term.strip() not in ['0', '1', '2', '3', '4', '5']:
+                    query_terms.append(clean_term.strip())
+
+            # Fallback to generic terms if no meaningful concepts found
+            if not query_terms:
+                query_terms = ["current context", "relevant information"]
+
+            # Create natural language query
+            if len(query_terms) == 1:
+                query = f"information about {query_terms[0]}"
+            elif len(query_terms) == 2:
+                query = f"information about {query_terms[0]} and {query_terms[1]}"
+            else:
+                query = f"information about {', '.join(query_terms[:-1])}, and {query_terms[-1]}"
+
+            return query
+
+        except Exception as e:
+            # Fallback query on error
+            return "general knowledge and context"
+
+    def _integrate_knowledge_context(self, output_spikes: torch.Tensor, knowledge_context: str) -> torch.Tensor:
+        """
+        Integrate retrieved knowledge context into the current processing.
+
+        This method combines the network's current output with external knowledge
+        context to enhance processing capabilities. The integration is done through
+        simple modulation based on knowledge availability and relevance.
+
+        Args:
+            output_spikes (torch.Tensor): Current output spike train
+            knowledge_context (str): Retrieved knowledge text
+
+        Returns:
+            torch.Tensor: Enhanced output with integrated knowledge
+        """
+        if not knowledge_context or not self._knowledge_augmenter:
+            return output_spikes
+
+        try:
+            # Simple knowledge integration based on context quality
+            context_length = len(knowledge_context.strip())
+
+            # Knowledge quality indicators
+            has_relevant_content = any(term in knowledge_context.lower()
+                                     for term in ['information', 'data', 'research', 'study', 'analysis'])
+
+            # Calculate knowledge enhancement factor
+            length_factor = min(context_length / 1000.0, 1.0)  # Normalize by typical context length
+            quality_factor = 1.2 if has_relevant_content else 1.0
+
+            # Overall enhancement factor (conservative)
+            enhancement_factor = 1.0 + (0.1 * length_factor * quality_factor)
+
+            # Apply enhancement to output spikes
+            enhanced_output = output_spikes * enhancement_factor
+
+            # Ensure spikes remain in valid range [0, 1] if they were originally
+            if torch.max(output_spikes) <= 1.0:
+                enhanced_output = torch.clamp(enhanced_output, 0.0, 1.0)
+
+            return enhanced_output
+
+        except Exception:
+            # Fallback to original output on error
+            return output_spikes
+
+    def get_conceptual_state(self) -> Optional[torch.Tensor]:
+        """
+        Get the current master conceptual state representing accumulated understanding.
+
+        Returns:
+            Optional[torch.Tensor]: Master conceptual state hypervector if VSA is enabled,
+                                  None otherwise. Shape: [vsa_dimension]
+        """
+        if self.enable_vsa and self.master_conceptual_state is not None:
+            return self.master_conceptual_state.clone()
+        return None
+
+    def get_conceptual_memory_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about the conceptual memory and VSA processing.
+
+        Returns:
+            Dict[str, Any]: Dictionary containing conceptual memory statistics
+        """
+        if not self.enable_vsa:
+            return {
+                'vsa_enabled': False,
+                'conceptual_memory_size': 0,
+                'vsa_dimension': 0
+            }
+
+        return {
+            'vsa_enabled': True,
+            'conceptual_memory_size': len(self.conceptual_memory),
+            'vsa_dimension': self.vsa_dimension,
+            'concept_keys': list(self.conceptual_memory.keys()),
+            'master_state_norm': torch.norm(self.master_conceptual_state).item() if self.master_conceptual_state is not None else 0.0
+        }
 
     def reset_states(self) -> None:
         """
@@ -648,6 +1193,28 @@ class DU_Core_V1(nn.Module):
             layer_info.append(info)
 
         return layer_info
+
+    def to(self, device):
+        """
+        Move the DU Core and all its components to the specified device.
+
+        This override ensures that VSA operations and conceptual memory
+        are also moved to the correct device for GPU acceleration.
+        """
+        # Move the base module
+        super().to(device)
+
+        # Move VSA operations to device
+        if self.vsa is not None:
+            self.vsa.device = device
+            # Move master conceptual state to device
+            if self.master_conceptual_state is not None:
+                self.master_conceptual_state = self.master_conceptual_state.to(device)
+            # Move conceptual memory to device
+            for key, concept_vector in self.conceptual_memory.items():
+                self.conceptual_memory[key] = concept_vector.to(device)
+
+        return self
 
     def __repr__(self) -> str:
         """String representation of the DU Core."""

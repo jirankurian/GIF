@@ -1,6 +1,6 @@
 **Your Current Task: Task 2.2 - Implementing the Central Orchestrator (The GIF Class)**
 
-**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 2, read all logs in the `.context/` (including the previous outcomes), and analyze the current project structure. After this analysis, formulate your micro-plan for this task and present it for my approval.
+**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 2, read all logs in the `.context/` (including the previous outcomes), and analyze the current project structure. After this analysis, formulate your micro-plan for this task and present it for my approval.
 
 ---
 

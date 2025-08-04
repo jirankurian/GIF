@@ -279,6 +279,78 @@ class TestECGPhysicsEngine:
             if wave != 'R':
                 assert a_i <= r_amplitude
 
+    def test_heart_rate_parameter_is_accurate(self):
+        """Test that heart rate parameter produces correct fundamental frequency (Task 1.5 requirement).
+
+        This validates the core timing of the biophysical model by analyzing the fundamental frequency.
+        The McSharry model generates a continuous oscillation at the heart rate frequency.
+        """
+        from scipy.fft import fft, fftfreq
+
+        # Test with 60 BPM (1 Hz fundamental frequency)
+        heart_rate = 60.0
+        expected_frequency = heart_rate / 60.0  # Convert BPM to Hz
+
+        engine = ECGPhysicsEngine(heart_rate_bpm=heart_rate)
+
+        # Generate ECG signal for frequency analysis
+        duration = 20.0  # 20 seconds for good frequency resolution
+        sampling_rate = 500
+        ecg_data = engine.generate_ecg_segment(
+            duration_seconds=duration,
+            sampling_rate=sampling_rate
+        )
+
+        # Extract voltage signal
+        voltage = ecg_data['voltage'].to_numpy()
+
+        # Perform FFT to find dominant frequency
+        fft_values = fft(voltage)
+        frequencies = fftfreq(len(voltage), 1.0 / sampling_rate)
+
+        # Calculate power spectrum (only positive frequencies)
+        positive_freq_mask = frequencies > 0
+        positive_frequencies = frequencies[positive_freq_mask]
+        power_spectrum = np.abs(fft_values[positive_freq_mask]) ** 2
+
+        # Find peak frequency in physiological range (0.5-3 Hz for 30-180 BPM)
+        freq_mask = (positive_frequencies >= 0.5) & (positive_frequencies <= 3.0)
+        if np.any(freq_mask):
+            freq_subset = positive_frequencies[freq_mask]
+            power_subset = power_spectrum[freq_mask]
+
+            peak_idx = np.argmax(power_subset)
+            dominant_frequency = freq_subset[peak_idx]
+
+            # Assert fundamental frequency matches heart rate
+            assert abs(dominant_frequency - expected_frequency) < 0.1, \
+                f"Expected {expected_frequency:.2f} Hz, found {dominant_frequency:.2f} Hz"
+
+        # Test with different heart rate
+        heart_rate_2 = 75.0  # 1.25 Hz
+        expected_frequency_2 = heart_rate_2 / 60.0
+
+        engine_2 = ECGPhysicsEngine(heart_rate_bpm=heart_rate_2)
+        ecg_data_2 = engine_2.generate_ecg_segment(
+            duration_seconds=duration,
+            sampling_rate=sampling_rate
+        )
+
+        voltage_2 = ecg_data_2['voltage'].to_numpy()
+        fft_values_2 = fft(voltage_2)
+        power_spectrum_2 = np.abs(fft_values_2[positive_freq_mask]) ** 2
+
+        freq_mask_2 = (positive_frequencies >= 0.5) & (positive_frequencies <= 3.0)
+        if np.any(freq_mask_2):
+            freq_subset_2 = positive_frequencies[freq_mask_2]
+            power_subset_2 = power_spectrum_2[freq_mask_2]
+
+            peak_idx_2 = np.argmax(power_subset_2)
+            dominant_frequency_2 = freq_subset_2[peak_idx_2]
+
+            assert abs(dominant_frequency_2 - expected_frequency_2) < 0.1, \
+                f"Expected {expected_frequency_2:.2f} Hz, found {dominant_frequency_2:.2f} Hz"
+
 
 class TestClinicalNoiseModel:
     """Test the ClinicalNoiseModel class."""
@@ -420,6 +492,89 @@ class TestClinicalNoiseModel:
 
         # Should be identical with same seed
         np.testing.assert_array_almost_equal(noise1, noise2, decimal=10)
+
+    def test_powerline_interference_adds_correct_frequency(self):
+        """Test that powerline interference adds correct frequency component (Task 1.5 requirement).
+
+        This proves our noise model is adding the correct type of artifact.
+        """
+        from scipy.fft import fft, fftfreq
+
+        # Generate clean ECG signal
+        engine = ECGPhysicsEngine(heart_rate_bpm=60.0)
+        duration = 10.0
+        sampling_rate = 500
+        clean_ecg = engine.generate_ecg_segment(
+            duration_seconds=duration,
+            sampling_rate=sampling_rate
+        )
+
+        # Add powerline interference using ClinicalNoiseModel
+        noise_model = ClinicalNoiseModel(seed=42)
+        time_array = clean_ecg['time'].to_numpy()
+
+        # Configure for 50 Hz powerline interference
+        noise_levels = {
+            'baseline': 0.0,      # No baseline wander
+            'muscle': 0.0,        # No muscle artifact
+            'powerline': 0.05,    # Strong powerline interference
+            'powerline_freq': 50.0  # 50 Hz frequency
+        }
+
+        composite_noise = noise_model.generate_composite_noise(
+            time_array, sampling_rate, noise_levels
+        )
+
+        # Combine clean signal with noise
+        clean_voltage = clean_ecg['voltage'].to_numpy()
+        noisy_voltage = clean_voltage + composite_noise
+
+        # Perform FFT on the noisy signal
+        fft_values = fft(noisy_voltage)
+        frequencies = fftfreq(len(noisy_voltage), 1.0 / sampling_rate)
+
+        # Calculate power spectrum (magnitude squared)
+        power_spectrum = np.abs(fft_values) ** 2
+
+        # Find frequency with maximum power in the range around 50 Hz
+        freq_range_mask = (frequencies >= 45.0) & (frequencies <= 55.0)
+        if np.any(freq_range_mask):
+            freq_subset = frequencies[freq_range_mask]
+            power_subset = power_spectrum[freq_range_mask]
+
+            # Find peak frequency in the 45-55 Hz range
+            peak_idx = np.argmax(power_subset)
+            peak_frequency = freq_subset[peak_idx]
+
+            # Assert that peak frequency is approximately 50 Hz
+            assert abs(peak_frequency - 50.0) < 1.0, f"Peak frequency {peak_frequency} Hz not close to 50 Hz"
+
+        # Additional validation: Test with 60 Hz
+        noise_levels_60hz = {
+            'baseline': 0.0,
+            'muscle': 0.0,
+            'powerline': 0.05,
+            'powerline_freq': 60.0  # 60 Hz frequency
+        }
+
+        composite_noise_60 = noise_model.generate_composite_noise(
+            time_array, sampling_rate, noise_levels_60hz
+        )
+
+        noisy_voltage_60 = clean_voltage + composite_noise_60
+        fft_values_60 = fft(noisy_voltage_60)
+        power_spectrum_60 = np.abs(fft_values_60) ** 2
+
+        # Find peak in 55-65 Hz range
+        freq_range_mask_60 = (frequencies >= 55.0) & (frequencies <= 65.0)
+        if np.any(freq_range_mask_60):
+            freq_subset_60 = frequencies[freq_range_mask_60]
+            power_subset_60 = power_spectrum_60[freq_range_mask_60]
+
+            peak_idx_60 = np.argmax(power_subset_60)
+            peak_frequency_60 = freq_subset_60[peak_idx_60]
+
+            assert abs(peak_frequency_60 - 60.0) < 1.0, f"Peak frequency {peak_frequency_60} Hz not close to 60 Hz"
 
 
 class TestRealisticECGGenerator:

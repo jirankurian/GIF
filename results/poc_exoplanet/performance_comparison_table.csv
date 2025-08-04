@@ -1,0 +1,4 @@
+Model,Accuracy,Precision,Recall,F1-Score,Energy (J/sample),Model Size (MB),Processing Time (s)
+GIF-DU,0.490,0.485,0.673,0.564,1.66e-05,0.5,0.0023
+CNN Baseline,0.815,0.820,0.810,0.814,2.98e+00,41.0,0.0450
+Transformer Baseline,0.880,0.885,0.875,0.882,5.61e+00,5.7,0.0320

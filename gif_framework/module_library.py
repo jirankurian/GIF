@@ -510,14 +510,92 @@ class ModuleLibrary:
         self._selection_history.clear()
         self.logger.info("Selection history cleared")
 
+    def get_encoders_by_signal_type(self, signal_type: str) -> List[EncoderInterface]:
+        """
+        Get all encoders that match the specified signal type.
+
+        This method enables meta-cognitive routing by allowing the system to
+        find encoders optimized for specific signal characteristics.
+
+        Args:
+            signal_type (str): Signal type to match ('periodic', 'transient', 'general', etc.)
+
+        Returns:
+            List[EncoderInterface]: List of matching encoder instances
+
+        Example:
+            # Get encoders optimized for periodic signals
+            periodic_encoders = library.get_encoders_by_signal_type('periodic')
+
+            # Get encoders for transient detection
+            transient_encoders = library.get_encoders_by_signal_type('transient')
+        """
+        matching_encoders = []
+
+        for entry in self._encoders.values():
+            if entry.metadata.signal_type == signal_type:
+                matching_encoders.append(entry.module)
+
+        # If no exact matches, look for general-purpose encoders
+        if not matching_encoders and signal_type != 'general':
+            for entry in self._encoders.values():
+                if entry.metadata.signal_type == 'general':
+                    matching_encoders.append(entry.module)
+
+        return matching_encoders
+
+    def get_decoders_by_output_type(self, output_type: str) -> List[DecoderInterface]:
+        """
+        Get all decoders that match the specified output type.
+
+        Args:
+            output_type (str): Output type to match ('classification', 'regression', etc.)
+
+        Returns:
+            List[DecoderInterface]: List of matching decoder instances
+        """
+        matching_decoders = []
+
+        for entry in self._decoders.values():
+            if entry.metadata.output_format == output_type:
+                matching_decoders.append(entry.module)
+
+        return matching_decoders
+
+    def get_modules_by_domain(self, domain: str) -> Tuple[List[EncoderInterface], List[DecoderInterface]]:
+        """
+        Get all modules (encoders and decoders) for a specific domain.
+
+        Args:
+            domain (str): Domain to match ('medical', 'astronomy', 'general', etc.)
+
+        Returns:
+            Tuple[List[EncoderInterface], List[DecoderInterface]]: Matching encoders and decoders
+        """
+        matching_encoders = []
+        matching_decoders = []
+
+        for entry in self._encoders.values():
+            if entry.metadata.domain == domain:
+                matching_encoders.append(entry.module)
+
+        for entry in self._decoders.values():
+            if entry.metadata.domain == domain:
+                matching_decoders.append(entry.module)
+
+        return matching_encoders, matching_decoders
+
     def get_library_stats(self) -> Dict[str, Any]:
         """Get comprehensive library statistics."""
         encoder_domains = {}
         decoder_domains = {}
+        encoder_signal_types = {}
 
         for entry in self._encoders.values():
             domain = entry.metadata.domain
+            signal_type = entry.metadata.signal_type
             encoder_domains[domain] = encoder_domains.get(domain, 0) + 1
+            encoder_signal_types[signal_type] = encoder_signal_types.get(signal_type, 0) + 1
 
         for entry in self._decoders.values():
             domain = entry.metadata.domain
@@ -529,6 +607,7 @@ class ModuleLibrary:
             'decoder_count': len(self._decoders),
             'encoder_domains': encoder_domains,
             'decoder_domains': decoder_domains,
+            'encoder_signal_types': encoder_signal_types,
             'selection_count': len(self._selection_history),
             'registration_count': self._registration_count
         }

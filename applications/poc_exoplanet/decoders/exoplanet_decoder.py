@@ -185,10 +185,13 @@ class ExoplanetDecoder(DecoderInterface, nn.Module):
         
         # Create trainable linear layer for regression mode
         self.regression_layer = nn.Linear(input_size, output_size)
-        
-        # Initialize weights using Xavier initialization for stable training
-        nn.init.xavier_uniform_(self.regression_layer.weight)
-        nn.init.zeros_(self.regression_layer.bias)
+
+        # Create trainable linear layer for classification mode (outputs logits)
+        self.classification_layer = nn.Linear(input_size, 2)  # Binary classification: 2 classes
+
+        # Initialize weights using specialized initialization for spike-based inputs
+        # Use smaller weights since spike counts can be large
+        self._initialize_spike_optimized_weights()
         
         # Statistics for monitoring and debugging
         self._last_decoding_stats = {
@@ -349,7 +352,12 @@ class ExoplanetDecoder(DecoderInterface, nn.Module):
 
         elif self.input_size == 2:
             # Two neurons: winner-take-all between planet/no-planet neurons
-            return int(torch.argmax(spike_counts).item())
+            # Neuron 0 = No Planet, Neuron 1 = Planet
+            neuron_0_spikes = spike_counts[0].item()
+            neuron_1_spikes = spike_counts[1].item()
+
+            # Winner-take-all: return index of neuron with most spikes
+            return 1 if neuron_1_spikes > neuron_0_spikes else 0
 
         else:
             # Multiple neurons: use total activity level
@@ -475,6 +483,58 @@ class ExoplanetDecoder(DecoderInterface, nn.Module):
             torch.Tensor: Regression outputs [batch_size, output_size].
         """
         return self.regression_layer(spike_counts)
+
+    def forward_classification(self, spike_counts: torch.Tensor) -> torch.Tensor:
+        """
+        PyTorch forward pass for classification mode (returns logits for training).
+
+        Args:
+            spike_counts: Spike count tensor [batch_size, input_size].
+
+        Returns:
+            torch.Tensor: Classification logits [batch_size, 2] for binary classification.
+        """
+        # Normalize spike counts to prevent extreme values
+        # Use adaptive normalization based on the current batch statistics
+        normalized_counts = self._normalize_spike_counts(spike_counts)
+        return self.classification_layer(normalized_counts)
+
+    def _normalize_spike_counts(self, spike_counts: torch.Tensor) -> torch.Tensor:
+        """
+        Normalize spike counts to reasonable range for neural network processing.
+
+        Args:
+            spike_counts: Raw spike counts [batch_size, input_size]
+
+        Returns:
+            torch.Tensor: Normalized spike counts in range suitable for linear layers
+        """
+        # Method 1: Divide by time steps to get spike rates (more biologically plausible)
+        # Assume typical time series length of ~1000-5000 steps
+        typical_time_steps = 4000.0
+        spike_rates = spike_counts / typical_time_steps
+
+        # Method 2: Additional scaling to keep values in reasonable range for neural networks
+        # Scale to roughly [-1, 1] range for better gradient flow
+        scaled_rates = spike_rates * 10.0  # Scale up to make differences more pronounced
+
+        return scaled_rates
+
+    def _initialize_spike_optimized_weights(self) -> None:
+        """
+        Initialize weights optimized for spike-based inputs.
+
+        Spike counts can be much larger than typical neural network inputs,
+        so we use smaller initial weights to prevent gradient explosion.
+        """
+        # For classification layer: use smaller weights since spike counts are normalized
+        # but can still be larger than typical inputs
+        nn.init.normal_(self.classification_layer.weight, mean=0.0, std=0.01)
+        nn.init.zeros_(self.classification_layer.bias)
+
+        # For regression layer: use Xavier but with smaller scale
+        nn.init.xavier_uniform_(self.regression_layer.weight, gain=0.1)
+        nn.init.zeros_(self.regression_layer.bias)
 
     def __repr__(self) -> str:
         """String representation of the decoder."""

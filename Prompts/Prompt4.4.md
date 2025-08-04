@@ -1,6 +1,6 @@
 **Your Current Task: Task 4.4 - Executing and Analyzing the Exoplanet Experiment**
 
-**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 4, read all logs in the `.context/` (confirming the completion of Tasks 4.1, 4.2, and 4.3), and analyze the existing codebase. You should assume that the `applications/poc_exoplanet/main_exo.py` script from the previous task can be run to produce detailed log files of an experiment. This task is about running that script and then making sense of its output. After your analysis, formulate your micro-plan for this task and present it for approval.
+**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 4, read all logs in the `.context/`, and analyze the existing codebase. You should assume that the `applications/poc_exoplanet/main_exo.py` script from the previous task can be run to produce detailed log files of an experiment. This task is about running that script and then making sense of its output. After your analysis, formulate your micro-plan for this task and present it for approval.
 
 ---
 

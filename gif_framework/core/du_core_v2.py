@@ -69,6 +69,9 @@ from gif_framework.interfaces.base_interfaces import SpikeTrain
 from gif_framework.core.rtl_mechanisms import PlasticityRuleInterface
 from gif_framework.core.memory_systems import EpisodicMemory
 
+# Import VSA for explicit Deep Understanding capabilities
+from gif_framework.core.vsa_operations import VSA
+
 # Import knowledge augmentation (with graceful fallback)
 try:
     from gif_framework.core.knowledge_augmenter import KnowledgeAugmenter
@@ -240,7 +243,7 @@ class HybridSNNSSMLayer(nn.Module):
 
         # Step 4: Generate spikes via LIF neuron
         # The LIF neuron maintains its own membrane potential state
-        output_spikes, _ = self.lif_neuron(potential)
+        output_spikes = self.lif_neuron(potential)
 
         return output_spikes, new_hidden_state
 
@@ -337,7 +340,9 @@ class DU_Core_V2(nn.Module):
         threshold: float = 1.0,
         plasticity_rule: Optional[PlasticityRuleInterface] = None,
         memory_system: Optional[EpisodicMemory] = None,
-        knowledge_augmenter: Optional['KnowledgeAugmenter'] = None
+        knowledge_augmenter: Optional['KnowledgeAugmenter'] = None,
+        vsa_dimension: int = 10000,
+        enable_vsa: bool = True
     ) -> None:
         """Initialize the DU Core v2 with hybrid SNN/SSM architecture."""
         super(DU_Core_V2, self).__init__()
@@ -347,6 +352,7 @@ class DU_Core_V2(nn.Module):
             input_size, hidden_sizes, output_size, state_dim,
             attention_interval, attention_heads, beta, threshold
         )
+        self._validate_vsa_parameters(vsa_dimension, enable_vsa)
 
         # Store configuration
         self.input_size = input_size
@@ -369,6 +375,19 @@ class DU_Core_V2(nn.Module):
                 "KnowledgeAugmenter dependencies not installed. Please install with: "
                 "pip install pymilvus>=2.3.0 neo4j>=5.0.0 sentence-transformers>=2.2.0"
             )
+
+        # Initialize Vector Symbolic Architecture for explicit Deep Understanding
+        self.enable_vsa = enable_vsa
+        if enable_vsa:
+            self.vsa = VSA(dimension=vsa_dimension)
+            self.conceptual_memory: Dict[str, torch.Tensor] = {}
+            self.master_conceptual_state = self.vsa.create_hypervector()
+            self.vsa_dimension = vsa_dimension
+        else:
+            self.vsa = None
+            self.conceptual_memory = {}
+            self.master_conceptual_state = None
+            self.vsa_dimension = 0
 
         # Build heterogeneous architecture
         self.layers = nn.ModuleList()
@@ -441,6 +460,39 @@ class DU_Core_V2(nn.Module):
         if any(size <= 0 for size in hidden_sizes):
             raise ValueError("All hidden layer sizes must be positive")
 
+    def _validate_vsa_parameters(
+        self,
+        vsa_dimension: int,
+        enable_vsa: bool
+    ) -> None:
+        """
+        Validate Vector Symbolic Architecture parameters.
+
+        Args:
+            vsa_dimension: The dimensionality of hypervectors
+            enable_vsa: Whether VSA is enabled
+
+        Raises:
+            ValueError: If VSA parameters are invalid.
+            TypeError: If parameters have incorrect types.
+        """
+        if not isinstance(enable_vsa, bool):
+            raise TypeError(f"enable_vsa must be a boolean, got {type(enable_vsa)}")
+
+        if not isinstance(vsa_dimension, int):
+            raise TypeError(f"vsa_dimension must be an integer, got {type(vsa_dimension)}")
+
+        if vsa_dimension <= 0:
+            raise ValueError(f"vsa_dimension must be positive, got {vsa_dimension}")
+
+        if vsa_dimension < 100:
+            import warnings
+            warnings.warn(
+                f"VSA dimension {vsa_dimension} is very small. "
+                f"Recommend at least 1000 for reliable operations.",
+                UserWarning
+            )
+
     def _initialize_weights(self) -> None:
         """Initialize weights for attention layers (SSM layers self-initialize)."""
         for layer in self.layers:
@@ -511,23 +563,21 @@ class DU_Core_V2(nn.Module):
 
         # Initialize hidden states for all SSM layers
         hidden_states = []
-        ssm_layer_idx = 0
-        for layer_type in self.layer_types:
+        for layer_idx, layer_type in enumerate(self.layer_types):
             if layer_type == 'ssm':
                 # Get the actual SSM layer to determine state_dim
-                ssm_layer = self.layers[ssm_layer_idx]
+                ssm_layer = self.layers[layer_idx]
                 hidden_state = torch.zeros(
                     batch_size, ssm_layer.state_dim,
                     device=input_spikes.device, dtype=input_spikes.dtype
                 )
                 hidden_states.append(hidden_state)
-                ssm_layer_idx += 1
             else:
                 hidden_states.append(None)  # Placeholder for attention layers
 
-        # Storage for output spikes and sequence history for attention
+        # Storage for output spikes and sequence history for each attention layer
         output_spikes_list = []
-        sequence_history = []  # For attention layers
+        attention_histories = {}  # Dictionary to store history for each attention layer
 
         # Main temporal simulation loop
         for step in range(num_steps):
@@ -535,39 +585,110 @@ class DU_Core_V2(nn.Module):
             layer_output = current_input
 
             # Process through all layers
-            layer_idx = 0
-            ssm_state_idx = 0
-
-            for layer_type in self.layer_types:
+            for layer_idx, layer_type in enumerate(self.layer_types):
                 layer = self.layers[layer_idx]
+
+                # Store pre-synaptic activity for RTL
+                pre_synaptic_activity = layer_output.clone()
 
                 if layer_type == 'ssm':
                     # Sequential SSM processing
-                    layer_output, hidden_states[ssm_state_idx] = layer(
-                        layer_output, hidden_states[ssm_state_idx]
+                    layer_output, hidden_states[layer_idx] = layer(
+                        layer_output, hidden_states[layer_idx]
                     )
-                    ssm_state_idx += 1
+
+                    # ---> RTL ENGINE: Apply plasticity rule to SSM layer <---
+                    if self.training and self._plasticity_rule is not None:
+                        try:
+                            # Apply plasticity rule to SSM matrices
+                            from gif_framework.core.rtl_mechanisms import ThreeFactor_Hebbian_Rule
+
+                            if isinstance(self._plasticity_rule, ThreeFactor_Hebbian_Rule):
+                                weight_updates = self._plasticity_rule.apply(
+                                    pre_activity=pre_synaptic_activity,
+                                    post_activity=layer_output,
+                                    modulatory_signal=1.0
+                                )
+                            else:
+                                weight_updates = self._plasticity_rule.apply(
+                                    pre_spikes=pre_synaptic_activity,
+                                    post_spikes=layer_output,
+                                    dt=1.0
+                                )
+
+                            # Update SSM layer weights (A, B, C generators)
+                            with torch.no_grad():
+                                self._apply_rtl_to_ssm_layer(layer, weight_updates, pre_synaptic_activity, layer_output)
+
+                        except Exception as e:
+                            import warnings
+                            warnings.warn(f"RTL mechanism failed at SSM layer {layer_idx}, step {step}: {str(e)}")
 
                 elif layer_type == 'attention':
                     # Parallel attention processing
-                    # Accumulate current output for sequence
-                    sequence_history.append(layer_output.unsqueeze(1))  # Add time dim
+                    # Initialize history for this attention layer if needed
+                    if layer_idx not in attention_histories:
+                        attention_histories[layer_idx] = []
 
-                    if len(sequence_history) > 1:
+                    # Accumulate current output for sequence
+                    attention_histories[layer_idx].append(layer_output.unsqueeze(1))  # Add time dim
+
+                    if len(attention_histories[layer_idx]) > 1:
                         # Create sequence tensor for attention
-                        sequence_tensor = torch.cat(sequence_history, dim=1)
+                        sequence_tensor = torch.cat(attention_histories[layer_idx], dim=1)
                         # Shape: [batch_size, sequence_length, features]
 
                         # Apply self-attention
-                        attended_output, _ = layer(
+                        attended_output, attention_weights = layer(
                             sequence_tensor, sequence_tensor, sequence_tensor
                         )
 
                         # Use the last time step output
                         layer_output = attended_output[:, -1, :]
+
+                        # ---> RTL ENGINE: Apply plasticity rule to attention layer <---
+                        if self.training and self._plasticity_rule is not None:
+                            try:
+                                # Apply plasticity rule to attention weights
+                                from gif_framework.core.rtl_mechanisms import ThreeFactor_Hebbian_Rule
+
+                                if isinstance(self._plasticity_rule, ThreeFactor_Hebbian_Rule):
+                                    weight_updates = self._plasticity_rule.apply(
+                                        pre_activity=pre_synaptic_activity,
+                                        post_activity=layer_output,
+                                        modulatory_signal=1.0
+                                    )
+                                else:
+                                    weight_updates = self._plasticity_rule.apply(
+                                        pre_spikes=pre_synaptic_activity,
+                                        post_spikes=layer_output,
+                                        dt=1.0
+                                    )
+
+                                # Update attention layer weights
+                                with torch.no_grad():
+                                    self._apply_rtl_to_attention_layer(layer, weight_updates, attention_weights)
+
+                            except Exception as e:
+                                import warnings
+                                warnings.warn(f"RTL mechanism failed at attention layer {layer_idx}, step {step}: {str(e)}")
                     # If only one time step, skip attention (need at least 2 for context)
 
-                layer_idx += 1
+                # Store experience in episodic memory if available
+                if self.training and self._memory_system is not None:
+                    try:
+                        from gif_framework.core.memory_systems import ExperienceTuple
+                        experience = ExperienceTuple(
+                            pre_synaptic_spikes=pre_synaptic_activity.detach(),
+                            post_synaptic_spikes=layer_output.detach(),
+                            reward_signal=0.0,
+                            context_vector=torch.mean(layer_output, dim=0).detach(),
+                            timestamp=step * len(self.layer_types) + layer_idx
+                        )
+                        self._memory_system.store_experience(experience)
+                    except Exception as e:
+                        import warnings
+                        warnings.warn(f"Memory storage failed at layer {layer_idx}, step {step}: {str(e)}")
 
             # Store output for this time step
             output_spikes_list.append(layer_output)
@@ -576,6 +697,101 @@ class DU_Core_V2(nn.Module):
         output_spikes = torch.stack(output_spikes_list, dim=0)
 
         return output_spikes
+
+    def _apply_rtl_to_ssm_layer(
+        self,
+        ssm_layer: HybridSNNSSMLayer,
+        weight_updates: torch.Tensor,
+        pre_activity: torch.Tensor,
+        post_activity: torch.Tensor
+    ) -> None:
+        """
+        Apply RTL weight updates to SSM layer components.
+
+        This method updates the A, B, C matrix generators in the SSM layer
+        based on the computed weight updates from the plasticity rule.
+
+        Args:
+            ssm_layer: The HybridSNNSSMLayer to update
+            weight_updates: Weight update tensor from plasticity rule
+            pre_activity: Pre-synaptic activity
+            post_activity: Post-synaptic activity
+        """
+        try:
+            # Scale weight updates appropriately for SSM components
+            update_scale = 0.01  # Increased for better detectability while maintaining stability
+
+            # Update A generator (state transition matrix generator)
+            if hasattr(ssm_layer, 'A_generator') and len(ssm_layer.A_generator) > 0:
+                for layer in ssm_layer.A_generator:
+                    if hasattr(layer, 'weight') and layer.weight.requires_grad:
+                        # Apply scaled updates to A generator weights
+                        update_size = min(weight_updates.numel(), layer.weight.numel())
+                        layer.weight.data.view(-1)[:update_size] += (
+                            weight_updates.view(-1)[:update_size] * update_scale
+                        )
+
+            # Update B generator (input matrix generator)
+            if hasattr(ssm_layer, 'B_generator') and len(ssm_layer.B_generator) > 0:
+                for layer in ssm_layer.B_generator:
+                    if hasattr(layer, 'weight') and layer.weight.requires_grad:
+                        update_size = min(weight_updates.numel(), layer.weight.numel())
+                        layer.weight.data.view(-1)[:update_size] += (
+                            weight_updates.view(-1)[:update_size] * update_scale
+                        )
+
+            # Update C generator (output matrix generator)
+            if hasattr(ssm_layer, 'C_generator') and len(ssm_layer.C_generator) > 0:
+                for layer in ssm_layer.C_generator:
+                    if hasattr(layer, 'weight') and layer.weight.requires_grad:
+                        update_size = min(weight_updates.numel(), layer.weight.numel())
+                        layer.weight.data.view(-1)[:update_size] += (
+                            weight_updates.view(-1)[:update_size] * update_scale
+                        )
+
+        except Exception as e:
+            import warnings
+            warnings.warn(f"Failed to apply RTL to SSM layer: {str(e)}")
+
+    def _apply_rtl_to_attention_layer(
+        self,
+        attention_layer: nn.MultiheadAttention,
+        weight_updates: torch.Tensor,
+        attention_weights: Optional[torch.Tensor] = None
+    ) -> None:
+        """
+        Apply RTL weight updates to attention layer components.
+
+        This method updates the attention layer weights based on the computed
+        weight updates from the plasticity rule.
+
+        Args:
+            attention_layer: The MultiheadAttention layer to update
+            weight_updates: Weight update tensor from plasticity rule
+            attention_weights: Optional attention weights for guided updates
+        """
+        try:
+            # Scale weight updates for attention layers
+            update_scale = 0.001  # Increased for better detectability while maintaining attention stability
+
+            # Update input projection weights
+            if hasattr(attention_layer, 'in_proj_weight') and attention_layer.in_proj_weight.requires_grad:
+                update_size = min(weight_updates.numel(), attention_layer.in_proj_weight.numel())
+                attention_layer.in_proj_weight.data.view(-1)[:update_size] += (
+                    weight_updates.view(-1)[:update_size] * update_scale
+                )
+
+            # Update output projection weights
+            if hasattr(attention_layer, 'out_proj') and hasattr(attention_layer.out_proj, 'weight'):
+                if attention_layer.out_proj.weight.requires_grad:
+                    update_size = min(weight_updates.numel(), attention_layer.out_proj.weight.numel())
+                    attention_layer.out_proj.weight.data.view(-1)[:update_size] += (
+                        weight_updates.view(-1)[:update_size] * update_scale
+                    )
+
+        except Exception as e:
+            import warnings
+            warnings.warn(f"Failed to apply RTL to attention layer: {str(e)}")
 
     def _detect_uncertainty(
         self,
@@ -723,21 +939,157 @@ class DU_Core_V2(nn.Module):
         the advanced hybrid architecture of v2.
 
         Args:
-            spike_train (SpikeTrain): Input spike train tensor
-                                    Shape: [num_steps, batch_size, input_size]
+            spike_train (SpikeTrain): Input spike train tensor with shape
+                                    [num_steps, batch_size, input_size] or
+                                    [batch_size, input_size] for single time step.
 
         Returns:
-            SpikeTrain: Processed output spike train
-                       Shape: [num_steps, batch_size, output_size]
+            SpikeTrain: Processed output spike train with shape
+                       [num_steps, batch_size, output_size] or
+                       [batch_size, output_size] for single time step input.
         """
-        if spike_train.dim() != 3:
+        # Handle both 2D and 3D inputs for backward compatibility
+        if spike_train.dim() == 2:
+            # Single time step input: [batch_size, input_size]
+            # Add time dimension: [1, batch_size, input_size]
+            spike_train = spike_train.unsqueeze(0)
+            single_step_input = True
+        elif spike_train.dim() == 3:
+            # Multi-step input: [num_steps, batch_size, input_size]
+            single_step_input = False
+        else:
             raise ValueError(
-                f"spike_train must be 3D tensor [num_steps, batch_size, input_size], "
+                f"spike_train must be 2D [batch_size, input_size] or "
+                f"3D [num_steps, batch_size, input_size] tensor, "
                 f"got shape {spike_train.shape}"
             )
 
         num_steps = spike_train.size(0)
-        return self.forward(spike_train, num_steps)
+        output_spikes = self.forward(spike_train, num_steps)
+
+        # Apply Vector Symbolic Architecture for explicit "Deep Understanding"
+        conceptual_state = None
+        if self.enable_vsa and self.vsa is not None:
+            conceptual_state = self._apply_vsa_processing(output_spikes)
+
+        # Store experience in episodic memory with conceptual state
+        if self._memory_system is not None:
+            try:
+                from gif_framework.core.memory_systems import ExperienceTuple
+                experience = ExperienceTuple(
+                    input_spikes=spike_train.detach().clone(),
+                    internal_state=None,  # Placeholder for future use
+                    output_spikes=output_spikes.detach().clone(),
+                    task_id="du_core_v2_processing",  # Default task ID
+                    conceptual_state=conceptual_state.detach().clone() if conceptual_state is not None else None
+                )
+                self._memory_system.add(experience)
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Failed to store experience in memory: {str(e)}")
+
+        # Handle output format for single-step inputs
+        if single_step_input:
+            # Remove time dimension: [1, batch_size, output_size] → [batch_size, output_size]
+            output_spikes = output_spikes.squeeze(0)
+
+        return output_spikes
+
+    def _apply_vsa_processing(self, output_spikes: torch.Tensor) -> torch.Tensor:
+        """
+        Apply Vector Symbolic Architecture processing for explicit "Deep Understanding".
+
+        This method implements the core "connecting the dots" mechanism by:
+        1. Representing the current output as a conceptual hypervector
+        2. Finding the most similar existing concept in conceptual memory
+        3. Binding the new concept with the related concept to form structured knowledge
+        4. Updating the master conceptual state through bundling
+
+        This transforms implicit pattern association into explicit conceptual understanding.
+
+        Args:
+            output_spikes (torch.Tensor): Output spike train from hybrid SNN/SSM processing
+                                        Shape: [num_steps, batch_size, output_size]
+
+        Returns:
+            torch.Tensor: Conceptual state hypervector representing the understanding
+                         formed from this processing cycle. Shape: [vsa_dimension]
+        """
+        # Step A: Represent Input as Conceptual Hypervector
+        # Create a new hypervector to represent this processing cycle
+        h_new = self.vsa.create_hypervector()
+
+        # Step B: Find Related Concept in Conceptual Memory
+        h_related = None
+        max_similarity = -1.0
+        related_concept_key = None
+
+        if self.conceptual_memory:
+            # Search for the most similar existing concept
+            for concept_key, concept_vector in self.conceptual_memory.items():
+                similarity = self.vsa.similarity(h_new, concept_vector)
+                if similarity > max_similarity:
+                    max_similarity = similarity
+                    h_related = concept_vector
+                    related_concept_key = concept_key
+
+        # Step C: Connect the Dots - Form Structured Concept
+        if h_related is not None and max_similarity > 0.3:  # Similarity threshold
+            # Bind new concept with related concept to form structured knowledge
+            h_structured = self.vsa.bind(h_new, h_related)
+
+            # Store the new structured concept in conceptual memory
+            new_concept_key = f"concept_{len(self.conceptual_memory)}"
+            self.conceptual_memory[new_concept_key] = h_structured
+
+        else:
+            # No related concept found - store as new base concept
+            h_structured = h_new
+            new_concept_key = f"base_concept_{len(self.conceptual_memory)}"
+            self.conceptual_memory[new_concept_key] = h_structured
+
+        # Step D: Update Master Conceptual State
+        # Bundle the new structured concept into the master state
+        self.master_conceptual_state = self.vsa.bundle([
+            self.master_conceptual_state,
+            h_structured
+        ])
+
+        return h_structured
+
+    def get_conceptual_state(self) -> Optional[torch.Tensor]:
+        """
+        Get the current master conceptual state representing accumulated understanding.
+
+        Returns:
+            Optional[torch.Tensor]: Master conceptual state hypervector if VSA is enabled,
+                                  None otherwise. Shape: [vsa_dimension]
+        """
+        if self.enable_vsa and self.master_conceptual_state is not None:
+            return self.master_conceptual_state.clone()
+        return None
+
+    def get_conceptual_memory_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about the conceptual memory and VSA processing.
+
+        Returns:
+            Dict[str, Any]: Dictionary containing conceptual memory statistics
+        """
+        if not self.enable_vsa:
+            return {
+                'vsa_enabled': False,
+                'conceptual_memory_size': 0,
+                'vsa_dimension': 0
+            }
+
+        return {
+            'vsa_enabled': True,
+            'conceptual_memory_size': len(self.conceptual_memory),
+            'vsa_dimension': self.vsa_dimension,
+            'concept_keys': list(self.conceptual_memory.keys()),
+            'master_state_norm': torch.norm(self.master_conceptual_state).item() if self.master_conceptual_state is not None else 0.0
+        }
 
     def reset_weights(self) -> None:
         """

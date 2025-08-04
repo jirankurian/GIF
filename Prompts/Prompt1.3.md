@@ -1,6 +1,6 @@
 **Your Current Task: Task 1.3 - The ECG Generator: Core Biophysical Engine**
 
-**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. This involves reviewing the `/Rules` directory, the `/Reference/`, reading all logs in the `.context/` (including from the previous), and analyzing the current codebase. After your analysis, formulate your micro-plan for this task and present it for approval.
+**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. This involves reviewing the `/Rules` directory, the `\docs` directory, the `/Reference/`, reading all logs in the `.context/` (including from the previous), and analyzing the current codebase. After your analysis, formulate your micro-plan for this task and present it for approval.
 
 -----
 

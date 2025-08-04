@@ -1,0 +1,17 @@
+{
+  "experiment_timestamp": "2025-07-11_01-38-24",
+  "cnn_summary": {
+    "accuracy": 0.815,
+    "f1_score": 0.814070351758794,
+    "energy_per_sample": 2.9802005874623667,
+    "model_size_mb": 41.01197052001953,
+    "training_time": 0.000988006591796875
+  },
+  "transformer_summary": {
+    "accuracy": 0.88,
+    "f1_score": 0.8823529411764707,
+    "energy_per_sample": 5.612668133496606,
+    "model_size_mb": 5.668952941894531,
+    "training_time": 0.0001399517059326172
+  }
+}

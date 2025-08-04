@@ -1,6 +1,6 @@
 **Your Current Task: Task 2.3 - Building the DU Core v1 (The SNN Brain)**
 
-**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 2, read all logs in the `.context/` (including all previous logs), and analyze the existing codebase. The `GIF` orchestrator we just built now expects a `DU_Core` instance. Your task is to create the first version of this critical component. After your analysis, formulate your micro-plan and present it for approval.
+**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 2, read all logs in the `.context/` (including all previous logs), and analyze the existing codebase. The `GIF` orchestrator we just built now expects a `DU_Core` instance. Your task is to create the first version of this critical component. After your analysis, formulate your micro-plan and present it for approval.
 
 ---
 

@@ -1,6 +1,6 @@
 **Your Current Task: Task 4.2 - Implementing the Exoplanet Application Modules (Encoder/Decoder)**
 
-**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 4, read all logs in the `.context/` (including the outcome of Task 4.1), and analyze the current codebase. You will note we have the interfaces for encoders/decoders but no concrete implementations for our exoplanet task. This task will create those first "plug-in" modules. After your analysis, formulate your micro-plan and present it for approval.
+**Protocol Reminder:** Before you begin, you must execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 4, read all logs in the `.context/` (including the outcome of Task 4.1), and analyze the current codebase. You will note we have the interfaces for encoders/decoders but no concrete implementations for our exoplanet task. This task will create those first "plug-in" modules. After your analysis, formulate your micro-plan and present it for approval.
 
 ---
 

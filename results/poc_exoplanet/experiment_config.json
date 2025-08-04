@@ -1,0 +1,119 @@
+{
+  "data": {
+    "num_training_samples": 200,
+    "num_test_samples": 50,
+    "validation_split": 0.2,
+    "observation_duration": 25.0,
+    "cadence_minutes": 30.0,
+    "stellar_variability_amplitude": 0.001,
+    "instrumental_noise_level": 0.0001,
+    "noise_color_alpha": 1.0,
+    "normalize_flux": true,
+    "random_seed": 42
+  },
+  "encoder": {
+    "type": "LightCurveEncoder",
+    "threshold": 0.0001,
+    "normalize_input": true,
+    "auto_calibrate": true
+  },
+  "architecture": {
+    "input_size": 2,
+    "hidden_sizes": [
+      64,
+      32
+    ],
+    "output_size": 2,
+    "neuron_beta": 0.8,
+    "neuron_threshold": 0.1,
+    "recurrent": false,
+    "enable_plasticity": true,
+    "plasticity_rule": "STDP",
+    "stdp_learning_rate_ltp": 0.01,
+    "stdp_learning_rate_ltd": 0.005,
+    "stdp_tau_ltp": 20.0,
+    "stdp_tau_ltd": 20.0,
+    "enable_memory": true,
+    "memory_capacity": 10000
+  },
+  "decoder": {
+    "type": "ExoplanetDecoder",
+    "classification_threshold": 0.5,
+    "regression_output_size": 1,
+    "default_mode": "classification"
+  },
+  "training": {
+    "learning_rate": 0.001,
+    "weight_decay": 1e-06,
+    "optimizer": "Adam",
+    "gradient_clip_norm": 0.5,
+    "num_epochs": 10,
+    "batch_size": 8,
+    "eval_frequency": 5,
+    "device": "cpu",
+    "use_mixed_precision": false,
+    "memory_batch_size": 1,
+    "task_id": "exoplanet_detection",
+    "loss_function": "CrossEntropyLoss",
+    "class_weights": null
+  },
+  "data_generation": {
+    "generator_type": "RealisticExoplanetGenerator",
+    "seed": 42,
+    "stellar_variability_amplitude": 0.001,
+    "instrumental_noise_level": 0.0001,
+    "noise_color_alpha": 1.0,
+    "observation_duration": 25.0,
+    "cadence_minutes": 30.0
+  },
+  "simulation": {
+    "energy_per_synop": 2.5e-11,
+    "simulation_time_steps": 100,
+    "enable_event_driven": true,
+    "spike_threshold": 0.1
+  },
+  "analysis": {
+    "metrics": [
+      "accuracy",
+      "precision",
+      "recall",
+      "f1_score",
+      "true_positive_rate",
+      "false_positive_rate",
+      "energy_consumption",
+      "spike_efficiency"
+    ],
+    "generate_plots": true,
+    "plot_format": "png",
+    "plot_dpi": 300,
+    "results_dir": "results/poc_exoplanet",
+    "plots_dir": "results/poc_exoplanet/plots",
+    "logs_dir": "results/poc_exoplanet/logs",
+    "export_formats": [
+      "csv",
+      "json"
+    ],
+    "save_model": true,
+    "save_config": true
+  },
+  "metadata": {
+    "experiment_name": "exoplanet_detection_poc",
+    "description": "Proof-of-concept for neuromorphic exoplanet detection using GIF framework",
+    "version": "1.0.0",
+    "author": "GIF Development Team",
+    "date_created": "2025-07-09",
+    "domain": "astronomy",
+    "task_type": "binary_classification",
+    "data_type": "time_series",
+    "hardware_target": "neuromorphic",
+    "gif_version": "1.0.0",
+    "framework_components": [
+      "RealisticExoplanetGenerator",
+      "LightCurveEncoder",
+      "DU_Core_V1",
+      "ExoplanetDecoder",
+      "NeuromorphicSimulator",
+      "Continual_Trainer"
+    ]
+  }
+}

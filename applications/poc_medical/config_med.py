@@ -138,8 +138,7 @@ def get_config() -> Dict[str, Any]:
                 "batch_size": 16,
                 "optimizer": "Adam",
                 "weight_decay": 1e-5,
-                "
-                
+
                 # Loss function
                 "loss_function": "CrossEntropyLoss",
                 "class_weights": None,  # Will be calculated from data

@@ -606,82 +606,196 @@ class GIF:
             print(f"❌ Auto-configuration failed: {e}")
             return False
 
-    def process_single_input(self, raw_data: Any) -> Action:
+    def _meta_control_select_encoder(self, task_description: str) -> Optional[EncoderInterface]:
         """
-        Execute a complete cognitive cycle on a single input.
-        
+        Select optimal encoder based on task description using meta-cognitive routing.
+
+        This method implements the core meta-cognitive capability by analyzing the
+        task description and selecting the most appropriate encoder from the module
+        library. This represents a significant step toward AGI by enabling the system
+        to reason about its own tools and make intelligent decisions.
+
+        The method uses keyword analysis to understand the signal characteristics
+        described in the task and matches them to encoder capabilities.
+
+        Args:
+            task_description (str): Natural language description of the task
+
+        Returns:
+            Optional[EncoderInterface]: Selected encoder instance, or None if no
+                                      suitable encoder found
+
+        Example:
+            # Select encoder for periodic signal analysis
+            encoder = gif._meta_control_select_encoder(
+                "Analyze this signal to find repeating patterns"
+            )
+            # Returns: FourierEncoder instance
+
+            # Select encoder for transient event detection
+            encoder = gif._meta_control_select_encoder(
+                "Find sudden bursts in this data"
+            )
+            # Returns: WaveletEncoder instance
+        """
+        if not self._module_library:
+            # Fallback to currently attached encoder if no library available
+            return self._encoder
+
+        try:
+            # Analyze task description for signal type keywords
+            description_lower = task_description.lower()
+
+            # Keywords for periodic signal detection
+            periodic_keywords = [
+                'periodic', 'repeating', 'cycle', 'regular', 'pattern',
+                'frequency', 'harmonic', 'oscillation', 'rhythm'
+            ]
+
+            # Keywords for transient signal detection
+            transient_keywords = [
+                'burst', 'transient', 'sudden', 'flare', 'spike',
+                'event', 'anomaly', 'irregular', 'flash', 'outburst'
+            ]
+
+            # Count keyword matches
+            periodic_score = sum(1 for word in periodic_keywords if word in description_lower)
+            transient_score = sum(1 for word in transient_keywords if word in description_lower)
+
+            # Select encoder based on highest score
+            if periodic_score > transient_score and periodic_score > 0:
+                # Look for Fourier encoder for periodic signals
+                encoders = self._module_library.get_encoders_by_signal_type('periodic')
+                if encoders:
+                    print(f"🧠 Meta-cognitive selection: FourierEncoder (periodic signal keywords: {periodic_score})")
+                    return encoders[0]  # Return first matching encoder
+
+            elif transient_score > periodic_score and transient_score > 0:
+                # Look for Wavelet encoder for transient signals
+                encoders = self._module_library.get_encoders_by_signal_type('transient')
+                if encoders:
+                    print(f"🧠 Meta-cognitive selection: WaveletEncoder (transient signal keywords: {transient_score})")
+                    return encoders[0]  # Return first matching encoder
+
+            # Default fallback: look for general-purpose encoder
+            general_encoders = self._module_library.get_encoders_by_signal_type('general')
+            if general_encoders:
+                print(f"🧠 Meta-cognitive selection: Default encoder (no specific signal type detected)")
+                return general_encoders[0]
+
+            # Final fallback: return currently attached encoder
+            if self._encoder:
+                print(f"🧠 Meta-cognitive fallback: Using attached {type(self._encoder).__name__}")
+                return self._encoder
+
+            print(f"⚠️  No suitable encoder found for task: {task_description[:50]}...")
+            return None
+
+        except Exception as e:
+            print(f"❌ Meta-cognitive encoder selection failed: {e}")
+            # Fallback to attached encoder
+            return self._encoder
+
+    def process_single_input(self, raw_data: Any, task_description: Optional[str] = None) -> Action:
+        """
+        Execute a complete cognitive cycle on a single input with optional meta-cognitive routing.
+
         This is the core operational method of the GIF framework. It orchestrates
         the complete flow of information through the system:
-        1. Validation: Ensures all required components are attached
-        2. Encoding: Converts raw data to standardized spike trains
-        3. Processing: Passes spike trains through the DU Core for "understanding"
-        4. Decoding: Converts processed spikes to meaningful actions
-        5. Return: Provides the final result to the calling application
-        
-        The method implements comprehensive error checking to ensure the system
-        is properly configured before attempting to process data.
-        
+        1. Meta-Cognitive Selection: Optionally select optimal encoder based on task description
+        2. Validation: Ensures all required components are attached
+        3. Encoding: Converts raw data to standardized spike trains
+        4. Processing: Passes spike trains through the DU Core for "understanding"
+        5. Decoding: Converts processed spikes to meaningful actions
+        6. Return: Provides the final result to the calling application
+
+        The method implements comprehensive error checking and optional meta-cognitive
+        routing to ensure optimal processing for the given task.
+
         Args:
-            raw_data (Any): Input data in any format supported by the attached
-                          encoder. The specific format depends on the encoder
-                          implementation (e.g., time series, images, text).
-        
+            raw_data (Any): Input data in any format supported by the encoder.
+                          The specific format depends on the encoder implementation.
+            task_description (Optional[str]): Natural language description of the task.
+                                            If provided and module library is available,
+                                            enables meta-cognitive encoder selection.
+
         Returns:
             Action: The final output from the decoder, which could be:
                    - Classification results (strings, integers)
                    - Regression values (floats, arrays)
                    - Control commands (dictionaries, objects)
                    - Any other domain-specific output type
-        
+
         Raises:
             RuntimeError: If encoder or decoder is not attached.
             ValueError: If the input data cannot be processed by the encoder.
             Exception: Any exception raised by the encoder, DU core, or decoder
                       will be propagated with additional context.
-        
+
         Example:
-            # Process astronomical data
+            # Standard processing
             result = gif.process_single_input(light_curve_data)
-            
-            # Process medical data
-            diagnosis = gif.process_single_input(ecg_signal)
-        
+
+            # Meta-cognitive processing with task description
+            result = gif.process_single_input(
+                light_curve_data,
+                "Find repeating patterns in this astronomical signal"
+            )
+            # Automatically selects FourierEncoder for periodic analysis
+
+            # Transient event detection
+            result = gif.process_single_input(
+                light_curve_data,
+                "Detect sudden flares and bursts in this data"
+            )
+            # Automatically selects WaveletEncoder for transient detection
+
         Note:
             This method represents a single "thought" of the artificial intelligence.
-            For continuous processing, call this method repeatedly with new data.
+            The optional task description enables meta-cognitive reasoning about
+            which tools to use for optimal processing.
         """
-        # Step 1: Validate that all required components are attached
-        if self._encoder is None:
+        # Step 1: Meta-cognitive encoder selection (if task description provided)
+        selected_encoder = self._encoder  # Default to attached encoder
+
+        if task_description and self._module_library:
+            # Use meta-cognitive routing to select optimal encoder
+            meta_selected_encoder = self._meta_control_select_encoder(task_description)
+            if meta_selected_encoder:
+                selected_encoder = meta_selected_encoder
+
+        # Step 2: Validate that all required components are available
+        if selected_encoder is None:
             raise RuntimeError(
-                "No encoder attached. Please attach an encoder using attach_encoder() "
-                "before processing input data."
+                "No encoder available. Please attach an encoder using attach_encoder() "
+                "or provide a module library for meta-cognitive selection."
             )
-        
+
         if self._decoder is None:
             raise RuntimeError(
                 "No decoder attached. Please attach a decoder using attach_decoder() "
                 "before processing input data."
             )
-        
+
         try:
-            # Step 2: Encode - Convert raw data to spike trains
-            spike_train: SpikeTrain = self._encoder.encode(raw_data)
-            
-            # Step 3: Process - Pass through the DU Core for "understanding"
-            # Note: The DU Core's process method will be implemented in Task 2.3
+            # Step 3: Encode - Convert raw data to spike trains using selected encoder
+            spike_train: SpikeTrain = selected_encoder.encode(raw_data)
+
+            # Step 4: Process - Pass through the DU Core for "understanding"
             processed_spikes: SpikeTrain = self._du_core.process(spike_train)
-            
-            # Step 4: Decode - Convert processed spikes to meaningful actions
+
+            # Step 5: Decode - Convert processed spikes to meaningful actions
             action: Action = self._decoder.decode(processed_spikes)
-            
-            # Step 5: Return the final result
+
+            # Step 6: Return the final result
             return action
-            
+
         except Exception as e:
             # Provide additional context for debugging while preserving the original exception
+            encoder_name = type(selected_encoder).__name__ if selected_encoder else "None"
             raise type(e)(
                 f"Error during cognitive cycle processing: {str(e)}. "
-                f"Encoder: {type(self._encoder).__name__}, "
+                f"Encoder: {encoder_name}, "
                 f"DU Core: {type(self._du_core).__name__}, "
                 f"Decoder: {type(self._decoder).__name__}"
             ) from e
@@ -726,3 +840,61 @@ class GIF:
             }
         }
         return config
+
+    def parameters(self):
+        """
+        Return the parameters of the DU Core for PyTorch optimization.
+
+        This method exposes the trainable parameters of the underlying DU Core,
+        enabling the GIF orchestrator to be used with PyTorch optimizers for
+        training and continual learning.
+
+        Returns:
+            Iterator: Iterator over DU Core parameters.
+
+        Example:
+            optimizer = torch.optim.Adam(gif_model.parameters(), lr=0.001)
+        """
+        return self._du_core.parameters()
+
+    def named_parameters(self):
+        """
+        Return the named parameters of the DU Core for PyTorch optimization.
+
+        Returns:
+            Iterator: Iterator over (name, parameter) pairs.
+        """
+        return self._du_core.named_parameters()
+
+    def state_dict(self):
+        """
+        Return the state dictionary of the DU Core for model saving/loading.
+
+        Returns:
+            Dict: State dictionary of the DU Core.
+        """
+        return self._du_core.state_dict()
+
+    def load_state_dict(self, state_dict):
+        """
+        Load state dictionary into the DU Core.
+
+        Args:
+            state_dict: State dictionary to load.
+        """
+        return self._du_core.load_state_dict(state_dict)
+
+    def train(self, mode=True):
+        """
+        Set the DU Core to training mode.
+
+        Args:
+            mode (bool): Whether to set training mode (True) or evaluation mode (False).
+        """
+        return self._du_core.train(mode)
+
+    def eval(self):
+        """
+        Set the DU Core to evaluation mode.
+        """
+        return self._du_core.eval()

@@ -1,6 +1,6 @@
 **Your Current Task: Task 3.4 - Developing the Evaluation Suite for Lifelong Learning**
 
-**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/Reference/` for Phase 3, read all logs in the `.context/` (which confirm the completion of Tasks 3.1, 3.2, and 3.3), and analyze the existing codebase. You will see we have a `Continual_Trainer` but no way to formally measure if it successfully prevents catastrophic forgetting. This task creates that measurement capability. After your analysis, formulate your micro-plan and present it for approval.
+**Protocol Reminder:** Before you begin, execute your full **Cognitive Cycle**. Review the `/Rules` directory, the `/docs` directory, the `/Reference/` for Phase 3, read all logs in the `.context/` (which confirm the completion of Tasks 3.1, 3.2, and 3.3), and analyze the existing codebase. You will see we have a `Continual_Trainer` but no way to formally measure if it successfully prevents catastrophic forgetting. This task creates that measurement capability. After your analysis, formulate your micro-plan and present it for approval.
 
 ---
 
