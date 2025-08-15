@@ -823,6 +823,15 @@ class DU_Core_V1(nn.Module):
         # This allows testing and analysis of uncertainty patterns
 
         try:
+            # Validate input tensor
+            if not isinstance(output_spikes, torch.Tensor):
+                output_spikes = torch.tensor(output_spikes, dtype=torch.float32)
+
+            # Handle invalid tensor dimensions
+            if output_spikes.dim() < 2:
+                # 1D tensor or scalar - insufficient for uncertainty calculation
+                return False, 0.0  # Return 0.0 for invalid input (matches test expectation)
+
             # Ensure we have the right tensor shape
             if output_spikes.dim() == 2:
                 # Add time dimension if missing: [batch_size, output_size] -> [1, batch_size, output_size]
@@ -846,14 +855,19 @@ class DU_Core_V1(nn.Module):
 
             # 2. Temporal consistency uncertainty
             # Calculate variance in spike patterns across time steps
-            temporal_patterns = torch.sum(output_spikes, dim=1)  # Sum over batch: [num_steps, output_size]
-            if temporal_patterns.size(0) > 1:
+            if output_spikes.dim() >= 3 and output_spikes.size(0) > 1:
+                # Sum over batch dimension if it exists: [num_steps, batch, output_size] -> [num_steps, output_size]
+                if output_spikes.dim() == 3:
+                    temporal_patterns = torch.sum(output_spikes, dim=1)  # Sum over batch
+                else:
+                    temporal_patterns = output_spikes  # Already [num_steps, output_size]
+
                 temporal_variance = torch.var(temporal_patterns, dim=0)  # Variance across time
                 temporal_uncertainty = torch.mean(temporal_variance).item()
                 # Normalize temporal uncertainty (heuristic scaling)
                 temporal_uncertainty = min(temporal_uncertainty / 10.0, 1.0)
             else:
-                temporal_uncertainty = 0.5  # Default for single time step
+                temporal_uncertainty = 0.5  # Default for single time step or insufficient dimensions
 
             # 3. Activity level uncertainty
             # Low overall activity can indicate uncertainty

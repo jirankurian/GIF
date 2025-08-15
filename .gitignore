@@ -158,6 +158,74 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+# GIF Framework specific
+# Output directories
+output/
+logs/
+data/generated/
+results/
+*.png
+*.csv
+*.pdf
+*.json
+*.pkl
+*.pt
+*.pth
+
+# Development artifacts (excluded from public repository)
+Reference/
+Rules/
+Prompts/
+.context/
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Model checkpoints and weights
+checkpoints/
+weights/
+models/
+*.ckpt
+*.model
+
+# Experiment outputs
+experiments/
+runs/
+wandb/
+
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

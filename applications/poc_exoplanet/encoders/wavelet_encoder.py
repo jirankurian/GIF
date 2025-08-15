@@ -83,25 +83,34 @@ import numpy as np
 from typing import Any, Dict, Union, Optional
 import warnings
 from scipy import signal
-# Import wavelet functions with fallback for different scipy versions
+# Use PyWavelets for modern wavelet analysis (avoiding deprecated scipy functions)
 try:
-    from scipy.signal import cwt, morlet2
+    import pywt
+    PYWAVELETS_AVAILABLE = True
 except ImportError:
-    # Fallback for newer scipy versions
-    try:
-        from scipy.signal._wavelets import cwt, morlet2
-    except ImportError:
-        # Simple fallback implementation
-        def cwt(data, wavelet, widths):
-            """Simple CWT fallback implementation."""
-            return np.array([np.convolve(data, wavelet(w), mode='same') for w in widths])
-
-        def morlet2(M, s, w=5):
-            """Simple Morlet wavelet fallback."""
-            x = np.arange(0, M) - (M - 1.0) / 2
-            x = x / s
-            wavelet = np.exp(1j * w * x) * np.exp(-0.5 * x**2) * np.pi**(-0.25) * np.sqrt(1 / s)
-            return wavelet
+    PYWAVELETS_AVAILABLE = False
+    # Fallback implementation for environments without PyWavelets
+    def cwt_fallback(data, wavelet_name, scales):
+        """Simple CWT fallback implementation."""
+        if wavelet_name == 'cmor':
+            # Complex Morlet wavelet approximation
+            results = []
+            for scale in scales:
+                # Simple convolution-based approximation
+                kernel_size = min(len(data) // 4, int(scale * 10))
+                if kernel_size < 3:
+                    kernel_size = 3
+                x = np.arange(kernel_size) - kernel_size // 2
+                # Morlet-like kernel
+                kernel = np.exp(1j * 2 * np.pi * x / scale) * np.exp(-x**2 / (2 * scale**2))
+                kernel = kernel / np.sqrt(scale)
+                # Convolve and extract same-size result
+                conv_result = np.convolve(data, kernel, mode='same')
+                results.append(conv_result)
+            return np.array(results)
+        else:
+            # Ricker wavelet fallback
+            return np.array([np.convolve(data, signal.ricker(len(data), scale), mode='same') for scale in scales])
 
 from gif_framework.interfaces.base_interfaces import EncoderInterface, SpikeTrain
 
@@ -280,17 +289,25 @@ class WaveletEncoder(EncoderInterface):
             return flux_array - flux_mean
     
     def _compute_cwt(self, flux_array: np.ndarray) -> np.ndarray:
-        """Compute Continuous Wavelet Transform."""
+        """Compute Continuous Wavelet Transform using PyWavelets or fallback."""
         try:
-            if self.wavelet_type == 'morlet':
-                # Use Morlet wavelet for good time-frequency localization
-                wavelet_coeffs = cwt(flux_array, morlet2, self.scales)
+            if PYWAVELETS_AVAILABLE:
+                if self.wavelet_type == 'morlet':
+                    # Use complex Morlet wavelet (cmor) with PyWavelets
+                    # cmor parameters: bandwidth=1.5, center_frequency=1.0
+                    wavelet_coeffs, _ = pywt.cwt(flux_array, self.scales, 'cmor1.5-1.0')
+                else:
+                    # Use Mexican hat (Ricker) wavelet
+                    wavelet_coeffs, _ = pywt.cwt(flux_array, self.scales, 'mexh')
             else:
-                # Use Ricker wavelet as alternative
-                wavelet_coeffs = cwt(flux_array, signal.ricker, self.scales)
-            
+                # Use fallback implementation
+                if self.wavelet_type == 'morlet':
+                    wavelet_coeffs = cwt_fallback(flux_array, 'cmor', self.scales)
+                else:
+                    wavelet_coeffs = cwt_fallback(flux_array, 'ricker', self.scales)
+
             return wavelet_coeffs
-            
+
         except Exception as e:
             raise RuntimeError(f"Wavelet transform failed: {str(e)}")
     

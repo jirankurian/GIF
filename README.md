@@ -39,16 +39,60 @@ The General Intelligence Framework (GIF) is a modular, extensible platform desig
 gif_framework/          # Core framework implementation
 ├── core/              # DU Core, RTL mechanisms, memory systems
 ├── interfaces/        # Abstract base classes for encoders/decoders
+├── training/          # Training utilities and protocols
 └── utils/             # Utility functions and helpers
 
 applications/          # Proof-of-concept applications
+├── analysis/          # Analysis tools and continual learning evaluation
 ├── poc_exoplanet/    # Exoplanet detection demonstration
-└── poc_medical/      # Medical diagnostics demonstration
+├── poc_medical/      # Medical diagnostics demonstration
+└── self_generation/   # Meta-cognitive self-generation capabilities
 
-data_generators/       # High-fidelity synthetic data generators
-simulators/           # Neuromorphic hardware simulation
-tests/               # Comprehensive test suite
-docs/                # Documentation and tutorials
+examples/             # Interactive demonstrations
+├── knowledge_augmentation_demo.py
+├── meta_cognition_demo.py
+├── system_potentiation_demo.py
+└── vsa_deep_understanding_demo.py
+
+data/                 # Data management
+├── generated/        # Synthetic datasets (ECG, exoplanet data)
+└── raw/             # External datasets
+
+output/              # Generated visualizations and results
+logs/                # System and training logs
+results/             # Experimental results and analysis
+data_generators/     # High-fidelity synthetic data generators
+simulators/          # Neuromorphic hardware simulation
+tests/              # Comprehensive test suite
+docs/               # Documentation and technical reports
+```
+
+## Quick Start
+
+### Running Examples
+
+The framework includes several interactive demonstrations showcasing key capabilities:
+
+```bash
+# Run examples using the convenience script
+python3 run_example.py meta_cognition_demo
+python3 run_example.py knowledge_augmentation_demo
+python3 run_example.py system_potentiation_demo
+python3 run_example.py vsa_deep_understanding_demo
+
+# Or run directly with PYTHONPATH
+PYTHONPATH=. python3 examples/meta_cognition_demo.py
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+python3 -m pytest
+
+# Run specific test suites
+python3 -m pytest tests/test_advanced_agi_validation.py -v
+python3 -m pytest tests/test_framework_structure.py -v
 ```
 
 ## Development Phases

@@ -186,7 +186,7 @@ def demonstrate_system_potentiation():
     create_potentiation_visualization(
         learning_rates, surprise_signals, performance_history, num_episodes
     )
-    print("   ✓ Visualization saved as 'system_potentiation_demo.png'")
+    print("   ✓ Visualization saved as 'output/system_potentiation_demo.png'")
     print()
     
     print("5. Key Findings:")
@@ -271,7 +271,12 @@ def create_potentiation_visualization(
     cbar.set_label('Episode')
     
     plt.tight_layout()
-    plt.savefig('system_potentiation_demo.png', dpi=300, bbox_inches='tight')
+
+    # Ensure output directory exists
+    import os
+    os.makedirs('output', exist_ok=True)
+
+    plt.savefig('output/system_potentiation_demo.png', dpi=300, bbox_inches='tight')
     plt.close()
 
 

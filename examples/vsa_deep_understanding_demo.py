@@ -317,10 +317,15 @@ def create_vsa_visualization(vsa_demo_results, du_core_results):
     ax4.legend()
     
     plt.tight_layout()
-    plt.savefig('vsa_deep_understanding_demo.png', dpi=300, bbox_inches='tight')
+
+    # Ensure output directory exists
+    import os
+    os.makedirs('output', exist_ok=True)
+
+    plt.savefig('output/vsa_deep_understanding_demo.png', dpi=300, bbox_inches='tight')
     plt.close()
-    
-    print("   ✓ Visualization saved as 'vsa_deep_understanding_demo.png'")
+
+    print("   ✓ Visualization saved as 'output/vsa_deep_understanding_demo.png'")
 
 
 def main():

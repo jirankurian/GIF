@@ -409,10 +409,15 @@ def create_knowledge_augmentation_visualization(uncertainty_results, vsa_results
         ax4.legend()
     
     plt.tight_layout()
-    plt.savefig('knowledge_augmentation_demo.png', dpi=300, bbox_inches='tight')
+
+    # Ensure output directory exists
+    import os
+    os.makedirs('output', exist_ok=True)
+
+    plt.savefig('output/knowledge_augmentation_demo.png', dpi=300, bbox_inches='tight')
     plt.close()
-    
-    print("   ✓ Visualization saved as 'knowledge_augmentation_demo.png'")
+
+    print("   ✓ Visualization saved as 'output/knowledge_augmentation_demo.png'")
 
 
 def main():
